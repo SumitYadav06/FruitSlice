@@ -1,4 +1,4 @@
-# Fruit Slice — build SIGNED RELEASE APK on every push.
+# BubbleFodo (repo BubbleBharo) — build SIGNED RELEASE APK on every push.
 # One permanent release keystore (GitHub secrets KEYSTORE_BASE64 /
 # KEYSTORE_PASSWORD / KEY_ALIAS / KEY_PASSWORD) signs every build, so
 # updates install over the previous version without uninstall.
@@ -37,7 +37,7 @@ jobs:
         run: |
           python3 - << 'EOF'
           import pathlib
-          app_id = 'ca-app-pub-2948876721824340~3364568815'
+          app_id = 'ca-app-pub-2948876721824340~2382146287'
           manifest = pathlib.Path('android/app/src/main/AndroidManifest.xml')
           s = manifest.read_text()
           if 'com.google.android.gms.ads.APPLICATION_ID' not in s:
@@ -115,6 +115,8 @@ jobs:
             exit 1
           fi
           echo "KEYSTORE_BASE64 length: ${#KEYSTORE_BASE64} chars (expect 3568)"
+          for i in 0 1 2 3; do off=$((i*892)); part="${KEYSTORE_BASE64:$off:892}"; echo "chunk$((i+1)) len: ${#part} md5: $(printf '%s' "$part" | md5sum | cut -d' ' -f1)"; done
+          echo "joined sha256: $(printf '%s' "$KEYSTORE_BASE64" | sha256sum | cut -d' ' -f1)"
           printf '%s' "$KEYSTORE_BASE64" | tr -d '[:space:]' | base64 -d > android/app/release.keystore
           if [ ! -s android/app/release.keystore ]; then echo "ERROR: decoded keystore is empty"; exit 1; fi
           ls -l android/app/release.keystore
@@ -170,5 +172,5 @@ jobs:
       - name: Upload release APK
         uses: actions/upload-artifact@v4
         with:
-          name: fruitslice-debug-apk
+          name: bubblebharo-debug-apk
           path: android/app/build/outputs/apk/release/app-release.apk
