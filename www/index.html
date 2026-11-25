@@ -227,6 +227,14 @@
   }
   .toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
 
+  /* ---------- Growth pack: full-screen art backgrounds + mode select ---------- */
+  #bgArtImg{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;z-index:0;opacity:0;transition:opacity .6s ease;}
+  canvas#game{z-index:1;}
+  .art-img{width:100%;max-width:430px;border-radius:14px;display:block;margin:0 0 12px;border:1px solid rgba(255,255,255,.12);}
+  .mode-row{display:flex;gap:8px;width:100%;max-width:430px;margin:0 0 10px;}
+  .mode-btn{flex:1;background:var(--panel);border:1px solid rgba(255,255,255,.14);color:var(--ink);border-radius:999px;padding:10px 6px;font-weight:800;font-size:14px;cursor:pointer;font-family:inherit;min-height:44px;}
+  .mode-btn.selected{background:linear-gradient(180deg,#ffd76a,#ff9a1f);color:#231303;border-color:#ff9a1f;}
+
   /* ---------- Small phones: keep the whole HUD on one line ---------- */
   @media (max-width:480px){
     #hud{gap:5px;padding-left:8px;padding-right:8px;}
@@ -256,12 +264,14 @@
 <body>
 <div id="app">
   <div id="stage">
+    <img id="bgArtImg" alt="" aria-hidden="true" />
     <canvas id="game" role="img" aria-label="Fruit Slice game area — swipe to slice fruit, avoid bombs"></canvas>
 
     <!-- HUD -->
     <div id="hud" class="hidden">
       <div class="hud-chip"><small data-i18n="score">Score</small><span id="hudScore">0</span></div>
       <div class="hud-chip"><small data-i18n="wave">Wave</small><span id="hudWave">1</span></div>
+      <div class="hud-chip hidden" id="hudTimer">⏱ <span id="hudTime">60</span></div>
       <div class="hud-chip" id="hudLives" aria-label="Lives"></div>
       <div class="hud-spacer"></div>
       <button class="icon-btn" id="btnSoundHud" aria-label="Sound">🔊</button>
@@ -276,6 +286,7 @@
       <div class="title-fruits" aria-hidden="true">🍉🍊🍓</div>
       <h1 class="game-title"><span class="t1">FRUIT</span> <span class="t2">SLICE</span></h1>
       <p class="tagline" data-i18n="tagline">Swipe to slice the fruit. Dodge the bombs!</p>
+      <img class="art-img" id="splashArt" alt="Fruit Slice splash art" />
 
       <div class="card howto" style="background:transparent;border:none;padding:0;">
         <div><span class="ic">👆</span><span data-i18n="h1">Swipe to slice</span><small data-i18n="h1s">finger or mouse</small></div>
@@ -283,12 +294,22 @@
         <div><span class="ic">🍍</span><span data-i18n="h3">Slice 3+ together</span><small data-i18n="h3s">combo bonus points</small></div>
       </div>
 
+      <div class="mode-row" role="group" aria-label="Game mode">
+        <button class="mode-btn selected" id="mode-classic">🍉 <span data-i18n="modeClassic">Classic</span></button>
+        <button class="mode-btn" id="mode-zen">🧘 <span data-i18n="modeZen">Zen · 60s</span></button>
+        <button class="mode-btn" id="mode-hard">🔥 <span data-i18n="modeHard">Hard</span></button>
+      </div>
+      <p class="sub" id="modeBest" style="margin:-4px 0 12px;"></p>
+
       <button class="btn btn-play" id="btnPlay">▶ <span data-i18n="play">PLAY</span></button>
 
       <div class="stat-row">
         <div class="stat"><b id="bestScore">0</b><span data-i18n="best">Best Score</span></div>
         <div class="stat"><b id="bestCombo">0</b><span data-i18n="bestCombo">Best Combo</span></div>
       </div>
+
+      <img class="art-img" id="feastArt" alt="New fruits" />
+      <p class="sub" data-i18n="newFruits" style="margin:-4px 0 12px;">6 new fruits — dragon fruit, coconut, blueberry, peach, plum &amp; pear!</p>
 
       <div class="ad-slot"><b>AD</b><span data-i18n="adSpace">Advertisement space</span></div>
 
@@ -314,6 +335,7 @@
       <h2 class="screen-head" id="overTitle">Game Over</h2>
       <div class="stars" id="overStars"></div>
       <p class="sub" id="overReason"></p>
+      <img class="art-img hidden" id="winArt" alt="Celebration" />
       <div class="stat-row">
         <div class="stat"><b id="finalScore">0</b><span data-i18n="score">Score</span></div>
         <div class="stat"><b id="finalSliced">0</b><span data-i18n="sliced">Fruit Sliced</span></div>
@@ -363,6 +385,7 @@ function saveSave(){
       v: 1,
       bestScore: bestScore,
       bestCombo: bestComboEver,
+      bestZen: bestZen,
       lang: lang,
       soundOn: soundOn,
       musicOn: musicOn
@@ -391,7 +414,11 @@ var I18N = {
     adIn: "Your game continues in",
     newBest: "New Best Score! 🏆",
     continueAd: "Continue — Watch Ad",
-    adNotFinished: "Ad not finished — try again"
+    adNotFinished: "Ad not finished — try again",
+    modeClassic: "Classic", modeZen: "Zen · 60s", modeHard: "Hard",
+    timeUp: "Time's up!",
+    newFruits: "6 new fruits — dragon fruit, coconut, blueberry, peach, plum & pear!",
+    bestZen: "Best Zen"
   },
   hi: {
     tagline: "उंगली घुमाकर फल काटो। बम से बचो!",
@@ -412,7 +439,11 @@ var I18N = {
     adIn: "आपका खेल जारी रहेगा",
     newBest: "नया सबसे अच्छा स्कोर! 🏆",
     continueAd: "जारी रखो — विज्ञापन देखो",
-    adNotFinished: "विज्ञापन पूरा नहीं हुआ — फिर से कोशिश करो"
+    adNotFinished: "विज्ञापन पूरा नहीं हुआ — फिर से कोशिश करो",
+    modeClassic: "क्लासिक", modeZen: "ज़ेन · 60 सेकंड", modeHard: "कठिन",
+    timeUp: "समय खत्म!",
+    newFruits: "6 नए फल — ड्रैगन फ्रूट, नारियल, ब्लूबेरी, आड़ू, आलूबुखारा और नाशपाती!",
+    bestZen: "सबसे अच्छा ज़ेन"
   }
 };
 var lang = "en";
@@ -455,11 +486,12 @@ function toneM(freq, dur, type, vol, delay){ /* music tone, gated by musicOn */
   o.connect(g); g.connect(ac.destination);
   o.start(t0); o.stop(t0 + dur + 0.05);
 }
-function sfxSlice(){ if(!soundOn) return; tone(900 + Math.random()*500, 0.09, "sawtooth", 0.05, 220); tone(300, 0.06, "triangle", 0.08, 90); }
-function sfxCombo(n){ if(!soundOn) return; var base = 520 + n*60; tone(base,0.1,"triangle",0.12); tone(base*1.25,0.12,"triangle",0.12,null,0.07); tone(base*1.5,0.16,"triangle",0.12,null,0.14); }
-function sfxBomb(){ if(!soundOn) return; tone(160,0.5,"sawtooth",0.22,40); tone(70,0.6,"square",0.18,30,0.02); }
-function sfxMiss(){ if(!soundOn) return; tone(340,0.16,"triangle",0.09,180); }
-function sfxClick(){ if(!soundOn) return; tone(660,0.06,"triangle",0.08); }
+function sfxSlice(){ if(!soundOn) return; if (playFileSfx("sfx-slice")) return; tone(900 + Math.random()*500, 0.09, "sawtooth", 0.05, 220); tone(300, 0.06, "triangle", 0.08, 90); }
+function sfxCombo(n){ if(!soundOn) return; if (playFileSfx("sfx-combo")) return; var base = 520 + n*60; tone(base,0.1,"triangle",0.12); tone(base*1.25,0.12,"triangle",0.12,null,0.07); tone(base*1.5,0.16,"triangle",0.12,null,0.14); }
+function sfxBomb(){ if(!soundOn) return; if (playFileSfx("sfx-bomb")) return; tone(160,0.5,"sawtooth",0.22,40); tone(70,0.6,"square",0.18,30,0.02); }
+function sfxMiss(){ if(!soundOn) return; if (playFileSfx("sfx-splat")) return; tone(340,0.16,"triangle",0.09,180); }
+function sfxWin(){ if(!soundOn) return; if (playFileSfx("sfx-win")) return; tone(523,0.14,"triangle",0.12); tone(659,0.14,"triangle",0.12,null,0.12); tone(784,0.2,"triangle",0.12,null,0.24); }
+function sfxClick(){ if(!soundOn) return; if (playFileSfx("sfx-click")) return; tone(660,0.06,"triangle",0.08); }
 function sfxWave(){ if(!soundOn) return; tone(523,0.1,"triangle",0.1); tone(659,0.1,"triangle",0.1,null,0.08); tone(784,0.14,"triangle",0.11,null,0.16); }
 var lastWhoosh = 0;
 function sfxWhoosh(){
@@ -486,8 +518,91 @@ function musicTick(){
   if (bas[i]) toneM(bas[i], 0.4, "sine", 0.06);
   musicStep++;
 }
-function startMusic(){ if (musicTimer) return; musicTimer = setInterval(musicTick, 300); }
-function stopMusic(){ if (musicTimer){ clearInterval(musicTimer); musicTimer = null; } }
+/* ---- Real audio files (assets/audio/): original synthesized tracks/SFX.
+   The WebAudio melody below stays only as a fallback if a file cannot
+   load — the files are the real music, not the synth. ---- */
+var musicEl = null, musicTrack = "assets/audio/music-sunny.mp3", musicFileOK = true;
+var sfxEls = {}, sfxFileBad = {};
+function ensureMusicEl(){
+  if (musicEl) return musicEl;
+  musicEl = new Audio();
+  musicEl.loop = true; musicEl.preload = "auto"; musicEl.volume = 0.5;
+  musicEl.addEventListener("error", function(){ musicFileOK = false; startSynthMusic(); });
+  return musicEl;
+}
+function setMusicTrack(src){
+  musicTrack = src;
+  if (musicEl && (!musicEl.src || musicEl.src.indexOf(src) < 0)) musicEl.src = src;
+}
+function startMusic(){
+  if (!musicOn) return;
+  if (musicFileOK){
+    var el = ensureMusicEl();
+    if (!el.src) el.src = musicTrack;
+    var p = el.play();
+    if (p && p.catch) p.catch(function(){ /* autoplay blocked until first tap */ });
+  } else startSynthMusic();
+}
+function stopMusic(){
+  if (musicEl) musicEl.pause();
+  stopSynthMusic();
+}
+function startSynthMusic(){ if (musicTimer) return; musicTimer = setInterval(musicTick, 300); }
+function stopSynthMusic(){ if (musicTimer){ clearInterval(musicTimer); musicTimer = null; } }
+function playFileSfx(name){
+  if (!soundOn || sfxFileBad[name]) return false;
+  try {
+    var a = sfxEls[name];
+    if (!a){
+      a = new Audio("assets/audio/" + name + ".mp3");
+      a.preload = "auto";
+      a.addEventListener("error", function(){ sfxFileBad[name] = true; });
+      sfxEls[name] = a;
+    }
+    a.currentTime = 0;
+    var p = a.play();
+    if (p && p.catch) p.catch(function(){});
+    return true;
+  } catch (e) { return false; }
+}
+
+/* ---------------- Growth pack: art themes, modes, music tracks ---------------- */
+var gameMode = "classic"; /* classic | zen | hard */
+var zenTimeLeft = 60;
+var bestZen = 0;
+var THEMES = { day:"assets/bg-day.jpg", sunset:"assets/bg-sunset.jpg", night:"assets/bg-night.jpg", zen:"assets/bg-zen.jpg", storm:"assets/bg-storm.jpg" };
+var MUSIC_BY_MODE = { classic:"assets/audio/music-sunny.mp3", zen:"assets/audio/music-sunset.mp3", hard:"assets/audio/music-night.mp3" };
+/* Lazy-load the heavy art after first paint so the first load stays fast. */
+function lazyLoadArt(){
+  var srcs = ["assets/splash.jpg","assets/win.jpg","assets/fruit-feast.jpg",
+    "assets/bg-day.jpg","assets/bg-sunset.jpg","assets/bg-night.jpg","assets/bg-zen.jpg","assets/bg-storm.jpg"];
+  for (var i=0;i<srcs.length;i++){ var im = new Image(); im.src = srcs[i]; }
+  var sp = document.getElementById("splashArt"); if (sp && !sp.getAttribute("src")) sp.src = "assets/splash.jpg";
+  var fe = document.getElementById("feastArt"); if (fe && !fe.getAttribute("src")) fe.src = "assets/fruit-feast.jpg";
+}
+function setTheme(name){
+  var img = document.getElementById("bgArtImg");
+  if (!img) return;
+  var src = THEMES[name] || THEMES.day;
+  if (img.getAttribute("src") !== src) img.src = src;
+  img.style.opacity = "1";
+}
+function themeForWave(){
+  if (gameMode === "zen") return "zen";
+  if (gameMode === "hard") return "storm";
+  if (wave <= 2) return "day";
+  if (wave <= 4) return "sunset";
+  return "night";
+}
+function syncModeUI(){
+  var modes = ["classic","zen","hard"];
+  for (var i=0;i<modes.length;i++){
+    var b = document.getElementById("mode-" + modes[i]);
+    if (b) b.classList.toggle("selected", gameMode === modes[i]);
+  }
+  var mb = document.getElementById("modeBest");
+  if (mb) mb.textContent = (gameMode === "zen" ? t("bestZen") : t("best")) + ": " + (gameMode === "zen" ? bestZen : bestScore);
+}
 
 /* ---------------- Canvas setup ---------------- */
 var canvas = document.getElementById("game");
@@ -512,6 +627,12 @@ var FRUITS = [
   { name:"strawberry", r:34, pts:9,  out:"#ff3b5c", out2:"#c21330", in:"#ff7d95", inEdge:"#ffc2cf", seed:"#ffe9a8" },
   { name:"mango",      r:38, pts:9,  out:"#ffb02e", out2:"#f07000", in:"#ffd76a", inEdge:"#ffedb5", seed:null },
   { name:"pineapple",  r:42, pts:12, out:"#f2b01e", out2:"#c07f00", in:"#ffe066", inEdge:"#fff3ae", seed:null },
+  { name:"dragonfruit", r:36, pts:11, out:"#ff4d8d", out2:"#c2135a", in:"#ffffff", inEdge:"#ffd6e8", seed:"#222222" },
+  { name:"coconut",    r:40, pts:11, out:"#6b4a2b", out2:"#4a2f18", in:"#ffffff", inEdge:"#e8dcc8", seed:null, speed:0.85 },
+  { name:"blueberry",  r:24, pts:6,  out:"#3b4fd8", out2:"#1e2a7a", in:"#5a6ee8", inEdge:"#aab6ff", seed:null, speed:1.3 },
+  { name:"peach",      r:36, pts:9,  out:"#ff9e7a", out2:"#e86a4a", in:"#ffd9a0", inEdge:"#ffe9c9", seed:null },
+  { name:"plum",       r:33, pts:8,  out:"#7a3fd1", out2:"#4a1e8a", in:"#c98bf0", inEdge:"#e8ccff", seed:"#3a1a5a" },
+  { name:"pear",       r:37, pts:9,  out:"#8bc34a", out2:"#558b2f", in:"#e8f5c9", inEdge:"#f5ffdd", seed:"#5a3a1a" },
   { name:"golden",     r:38, pts:25, out:"#ffe259", out2:"#f5a623", in:"#fff7ae", inEdge:"#ffffff", seed:null, golden:true }
 ];
 
@@ -540,6 +661,11 @@ function newFruit(x, vx, vy, def, isBomb){
 function launchWave(){
   waveFruitLeft = 4 + Math.min(10, wave * 2);
   spawnTimer = 0.2;
+  setTheme(themeForWave());
+  if (wave % 3 === 0 && wave > 1){
+    /* rain pattern: three fruits launch together at the wave start */
+    for (var ri=0; ri<3 && waveFruitLeft>0; ri++) spawnOne();
+  }
   showWaveBanner(t("waveTxt") + " " + wave);
   sfxWave();
 }
@@ -548,14 +674,19 @@ function spawnOne(){
   var x = rand(margin, Math.max(margin+1, W - margin));
   var vx = rand(-40, 40) + (W/2 - x) * rand(0.1, 0.35);
   var vy = -rand(H*1.18, H*1.38) - wave * 12;
+  if (gameMode === "hard") vy *= 1.15;
   var roll = Math.random();
-  var bombChance = wave < 2 ? 0 : Math.min(0.10 + wave * 0.012, 0.24);
+  var bombChance = 0;
+  if (gameMode !== "zen") bombChance = wave < 2 ? 0 : Math.min(0.10 + wave * 0.012, 0.24);
+  if (gameMode === "hard") bombChance = Math.min(0.16 + wave * 0.02, 0.32);
   if (roll < bombChance){
     fruits.push(newFruit(x, vx, vy, null, true));
   } else if (roll > 0.975){
     fruits.push(newFruit(x, vx, vy, FRUITS[FRUITS.length-1], false)); /* golden */
   } else {
-    fruits.push(newFruit(x, vx, vy, pick(FRUITS.slice(0, FRUITS.length-1)), false));
+    var def = pick(FRUITS.slice(0, FRUITS.length-1));
+    if (def.speed) vy *= def.speed;
+    fruits.push(newFruit(x, vx, vy, def, false));
   }
   waveFruitLeft--;
 }
@@ -654,14 +785,18 @@ function showScreen(name){
 function startGame(){
   gameRun++; /* cancels any frenzy timers left over from a previous run */
   continuedThisRun = false;
-  audio(); if (musicOn) startMusic();
+  audio();
+  setMusicTrack(MUSIC_BY_MODE[gameMode] || MUSIC_BY_MODE.classic);
+  if (musicOn) startMusic();
   fruits = []; halves = []; particles = []; floaters = []; splashes = [];
-  score = 0; slicedCount = 0; lives = 3; wave = 1;
+  score = 0; slicedCount = 0; lives = (gameMode === "hard" ? 2 : 3); wave = 1; zenTimeLeft = 60;
   comboCount = 0; comboTimer = 0; runBestCombo = 0;
   elapsed = 0; shake = 0; flashRed = 0;
   MODE = "playing";
   launchWave();
   updateHUD();
+  document.getElementById("hudTimer").classList.toggle("hidden", gameMode !== "zen");
+  document.getElementById("hudTime").textContent = "60";
   showScreen(null);
   document.getElementById("hud").classList.remove("hidden");
   /* Real banner is Home-only — hide it while playing. */
@@ -671,8 +806,9 @@ function endGame(reason){
   if (MODE !== "playing") return;
   MODE = "over";
   gamesPlayed++;
-  var isBest = score > bestScore;
-  if (isBest) bestScore = score;
+  var isBest = false;
+  if (gameMode === "zen"){ isBest = score > bestZen; if (isBest) bestZen = score; }
+  else { isBest = score > bestScore; if (isBest) bestScore = score; }
   if (runBestCombo > bestComboEver) bestComboEver = runBestCombo;
   document.getElementById("bestScore").textContent = bestScore;
   document.getElementById("bestCombo").textContent = bestComboEver;
@@ -682,6 +818,8 @@ function endGame(reason){
   document.getElementById("finalScore").textContent = score;
   document.getElementById("finalSliced").textContent = slicedCount;
   document.getElementById("finalCombo").textContent = runBestCombo;
+  var wa = document.getElementById("winArt");
+  if (wa){ wa.classList.toggle("hidden", !isBest); if (isBest){ wa.src = "assets/win.jpg"; sfxWin(); } }
   var stars = score >= 300 ? 3 : score >= 150 ? 2 : score >= 50 ? 1 : 0;
   var sh = "";
   for (var i=0;i<3;i++) sh += '<span class="pop ' + (i < stars ? "on" : "off") + '">★</span>';
@@ -734,11 +872,12 @@ function continueAfterAd(){
   if (MODE !== "over" && MODE !== "ad") return;
   continuedThisRun = true;
   fruits = []; halves = []; particles = []; floaters = []; splashes = [];
-  lives = 3; comboCount = 0; comboTimer = 0; runBestCombo = 0;
-  shake = 0; flashRed = 0;
+  lives = (gameMode === "hard" ? 2 : 3); comboCount = 0; comboTimer = 0; runBestCombo = 0;
+  shake = 0; flashRed = 0; zenTimeLeft = 60;
   MODE = "playing";
   launchWave();
   updateHUD();
+  document.getElementById("hudTimer").classList.toggle("hidden", gameMode !== "zen");
   showScreen(null);
   document.getElementById("hud").classList.remove("hidden");
   if(window.AdMobNative) window.AdMobNative.hideBanner();
@@ -778,6 +917,10 @@ function goHome(){
   MODE = "home";
   fruits = []; halves = []; particles = []; floaters = [];
   showScreen("home");
+  setTheme("day");
+  setMusicTrack(MUSIC_BY_MODE.classic);
+  if (musicOn) startMusic();
+  syncModeUI();
   /* Back on Home — the real banner belongs here, not during play. */
   if(window.AdMobNative) window.AdMobNative.showHomeBanner();
 }
@@ -794,6 +937,13 @@ function updateHUD(){
 var GRAV = 1500;
 function update(dt){
   elapsed += dt;
+  if (MODE === "playing" && gameMode === "zen"){
+    zenTimeLeft -= dt;
+    var tLeft = Math.max(0, Math.ceil(zenTimeLeft));
+    var ht = document.getElementById("hudTime");
+    if (ht && ht.textContent !== String(tLeft)) ht.textContent = tLeft;
+    if (zenTimeLeft <= 0){ endGame(t("timeUp")); return; }
+  }
   if (shake > 0) shake = Math.max(0, shake - dt*30);
   if (flashRed > 0) flashRed = Math.max(0, flashRed - dt);
 
@@ -861,6 +1011,9 @@ function update(dt){
         if (f.def && f.def.golden){
           /* bonus fruit: missing it costs no life */
           addFloater(f.x, H - 60, "★", "#ffd76a", 26);
+        } else if (gameMode === "zen"){
+          /* Zen mode: a missed fruit costs no life — just slice and relax */
+          addFloater(f.x, H - 60, "✕", "#ff6b57", 30);
         } else {
           lives--;
           sfxMiss();
@@ -912,9 +1065,9 @@ var bgGrad = null, bgGradH = 0;
 function drawBackground(){
   if (!bgGrad || bgGradH !== H){ /* cache: rebuilt only when height changes */
     bgGrad = ctx.createLinearGradient(0,0,0,H);
-    bgGrad.addColorStop(0, "#274d33");
-    bgGrad.addColorStop(0.55, "#1d3d27");
-    bgGrad.addColorStop(1, "#122a1a");
+    bgGrad.addColorStop(0, "rgba(39,77,51,0.42)");
+    bgGrad.addColorStop(0.55, "rgba(29,61,39,0.55)");
+    bgGrad.addColorStop(1, "rgba(18,42,26,0.72)");
     bgGradH = H;
   }
   ctx.fillStyle = bgGrad;
@@ -988,7 +1141,37 @@ function drawFruitBody(f){
     ctx.ellipse(0, -f.r + 3, f.r*0.5, 7, 0, 0, Math.PI*2);
     ctx.fill();
   }
-  if (d.name === "apple" || d.name === "orange" || d.name === "mango" || d.name === "golden"){
+  if (d.name === "dragonfruit"){
+    ctx.fillStyle = "#3cb531";
+    for (var df=-2; df<=2; df++){
+      ctx.beginPath();
+      ctx.moveTo(df * f.r * 0.32, -f.r * 0.55);
+      ctx.lineTo(df * f.r * 0.32 + 7, -f.r * 0.95);
+      ctx.lineTo(df * f.r * 0.32 + 14, -f.r * 0.55);
+      ctx.closePath(); ctx.fill();
+    }
+  }
+  if (d.name === "coconut"){
+    ctx.fillStyle = "rgba(0,0,0,0.35)";
+    for (var ccI=-1; ccI<=1; ccI++){
+      ctx.beginPath(); ctx.arc(ccI * 9, -4, 3.2, 0, Math.PI*2); ctx.fill();
+    }
+  }
+  if (d.name === "blueberry"){
+    ctx.fillStyle = "#1e2a7a";
+    ctx.beginPath(); ctx.arc(0, -f.r + 6, 5, 0, Math.PI*2); ctx.fill();
+    ctx.fillStyle = "#8fa2ff";
+    ctx.beginPath(); ctx.arc(0, -f.r + 6, 2.4, 0, Math.PI*2); ctx.fill();
+  }
+  if (d.name === "peach"){
+    ctx.strokeStyle = "rgba(180,60,30,0.45)"; ctx.lineWidth = 2.5;
+    ctx.beginPath(); ctx.moveTo(0, -f.r + 4); ctx.quadraticCurveTo(4, 0, 0, f.r - 4); ctx.stroke();
+  }
+  if (d.name === "pear"){
+    ctx.fillStyle = circleGrad(0, -f.r * 0.3, f.r * 0.72, d.out, d.out2);
+    ctx.beginPath(); ctx.arc(0, -f.r * 0.28, f.r * 0.72, 0, Math.PI*2); ctx.fill();
+  }
+  if (d.name === "apple" || d.name === "orange" || d.name === "mango" || d.name === "golden" || d.name === "plum" || d.name === "pear" || d.name === "peach"){
     ctx.strokeStyle = "#5a3a1a"; ctx.lineWidth = 3.5;
     ctx.beginPath(); ctx.moveTo(0, -f.r + 2); ctx.quadraticCurveTo(2, -f.r - 8, 6, -f.r - 10); ctx.stroke();
     ctx.fillStyle = "#3cb531";
@@ -1217,6 +1400,9 @@ setInterval(function(){
 function bind(id, fn){
   document.getElementById(id).addEventListener("click", function(){ audio(); fn(); });
 }
+bind("mode-classic", function(){ gameMode = "classic"; syncModeUI(); sfxClick(); });
+bind("mode-zen", function(){ gameMode = "zen"; syncModeUI(); sfxClick(); });
+bind("mode-hard", function(){ gameMode = "hard"; syncModeUI(); sfxClick(); });
 bind("btnPlay", function(){ sfxClick(); startGame(); });
 bind("btnAgain", function(){ sfxClick(); startGame(); });
 bind("btnContinue", function(){ sfxClick(); watchContinueAd(); });
@@ -1282,6 +1468,7 @@ document.addEventListener("pointerdown", function once(){
   if (d){
     if (typeof d.bestScore === "number" && d.bestScore > 0) bestScore = d.bestScore;
     if (typeof d.bestCombo === "number" && d.bestCombo > 0) bestComboEver = d.bestCombo;
+    if (typeof d.bestZen === "number" && d.bestZen > 0) bestZen = d.bestZen;
     if (d.lang === "en" || d.lang === "hi") lang = d.lang;
     if (typeof d.soundOn === "boolean") soundOn = d.soundOn;
     if (typeof d.musicOn === "boolean") musicOn = d.musicOn;
@@ -1292,8 +1479,10 @@ document.addEventListener("pointerdown", function once(){
 resize();
 applyLang();
 syncToggles();
+syncModeUI();
 updateHUD();
 showScreen("home");
+setTimeout(function(){ lazyLoadArt(); setTheme("day"); }, 400);
 requestAnimationFrame(loop);
 setTimeout(resize, 60);
 /* Real AdMob (APK only): initialise the SDK, preload ads and show
