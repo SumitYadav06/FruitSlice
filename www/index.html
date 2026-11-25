@@ -1,0 +1,1257 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no" />
+<meta name="color-scheme" content="dark" />
+<link rel="icon" href="data:," />
+<title>Fruit Slice</title>
+<style>
+  :root{
+    --bg:#0d1f16;
+    --panel:#14291d;
+    --panel2:#1b3527;
+    --ink:#f2f7ee;
+    --muted:#a9c3ab;
+    --accent:#ffb02e;
+    --accent2:#ff5a3c;
+    --green:#58d13d;
+    --radius:18px;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+  html,body{height:100%;}
+  body{
+    margin:0;
+    font-family:"Trebuchet MS","Segoe UI",system-ui,sans-serif;
+    background:var(--bg);
+    color:var(--ink);
+    overflow:hidden;
+    overscroll-behavior:none;
+  }
+  button,[role="button"]{min-height:44px;touch-action:manipulation;}
+  button:focus-visible{outline:3px solid #ffd76a;outline-offset:2px;}
+  #app{position:fixed;inset:0;display:flex;flex-direction:column;}
+
+  /* ---------- Game stage ---------- */
+  #stage{position:relative;flex:1;min-height:0;}
+  canvas#game{position:absolute;inset:0;width:100%;height:100%;display:block;touch-action:none;}
+
+  /* HUD */
+  #hud{
+    position:absolute;top:0;left:0;right:0;
+    display:flex;align-items:flex-start;gap:8px;
+    padding:calc(env(safe-area-inset-top,0px) + 10px) 12px 0;
+    pointer-events:none;z-index:5;
+  }
+  .hud-chip{
+    background:rgba(10,24,15,.72);
+    border:1px solid rgba(255,255,255,.14);
+    border-radius:999px;
+    padding:6px 14px;
+    font-weight:800;font-size:15px;letter-spacing:.02em;
+    display:flex;align-items:center;gap:6px;
+    backdrop-filter:blur(3px);
+  }
+  .hud-chip small{font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;}
+  #hudScore{font-size:19px;color:#ffd76a;}
+  #hudLives{font-size:16px;letter-spacing:2px;}
+  #hudLives .lost{opacity:.22;filter:grayscale(1);}
+  .hud-spacer{flex:1;}
+  .icon-btn{
+    pointer-events:auto;
+    width:44px;height:44px;border-radius:50%;
+    border:1px solid rgba(255,255,255,.18);
+    background:rgba(10,24,15,.72);color:var(--ink);
+    font-size:19px;display:flex;align-items:center;justify-content:center;
+    cursor:pointer;backdrop-filter:blur(3px);
+  }
+  .icon-btn:active{transform:scale(.92);}
+
+  /* Wave banner */
+  #waveBanner{
+    position:absolute;left:0;right:0;top:34%;
+    text-align:center;pointer-events:none;z-index:4;
+    font-size:clamp(30px,8vw,52px);font-weight:900;color:#fff;
+    text-shadow:0 3px 0 rgba(0,0,0,.35),0 0 26px rgba(255,176,46,.55);
+    opacity:0;transform:scale(.7);
+  }
+  #waveBanner.show{animation:wavePop 1.6s ease forwards;}
+  @keyframes wavePop{
+    0%{opacity:0;transform:scale(.7);}
+    18%{opacity:1;transform:scale(1.06);}
+    30%{transform:scale(1);}
+    78%{opacity:1;}
+    100%{opacity:0;transform:scale(1.02);}
+  }
+
+  /* ---------- Screens ---------- */
+  .screen{
+    position:absolute;inset:0;z-index:10;
+    display:flex;flex-direction:column;align-items:center;
+    padding:calc(env(safe-area-inset-top,0px) + 18px) 18px calc(env(safe-area-inset-bottom,0px) + 14px);
+    background:linear-gradient(180deg,rgba(9,22,13,.55),rgba(9,22,13,.88) 70%);
+    overflow-y:auto;
+  }
+  .hidden{display:none !important;}
+
+  .game-title{
+    margin:8px 0 2px;text-align:center;
+    font-size:clamp(44px,13vw,74px);font-weight:900;line-height:.98;
+    letter-spacing:.01em;
+  }
+  .game-title .t1{
+    background:linear-gradient(180deg,#ffe259,#ff7518);
+    -webkit-background-clip:text;background-clip:text;color:transparent;
+    filter:drop-shadow(0 3px 0 rgba(120,40,0,.55));
+  }
+  .game-title .t2{
+    background:linear-gradient(180deg,#b6ff7a,#2fae4e);
+    -webkit-background-clip:text;background-clip:text;color:transparent;
+    filter:drop-shadow(0 3px 0 rgba(10,60,20,.6));
+  }
+  .tagline{color:var(--muted);font-size:15px;font-weight:600;margin:4px 0 14px;text-align:center;}
+  .title-fruits{font-size:34px;letter-spacing:8px;animation:bob 2.2s ease-in-out infinite;}
+  @keyframes bob{0%,100%{transform:translateY(0);}50%{transform:translateY(-7px);}}
+  @media (prefers-reduced-motion: reduce){
+    .title-fruits{animation:none;}
+    #waveBanner.show{animation-duration:.01s;}
+  }
+
+  .card{
+    background:var(--panel);
+    border:1px solid rgba(255,255,255,.09);
+    border-radius:var(--radius);
+    padding:16px;
+    width:100%;max-width:430px;
+  }
+  .howto{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin:0 0 14px;}
+  .howto div{
+    background:var(--panel2);border-radius:14px;padding:10px 8px;text-align:center;
+  }
+  .howto .ic{font-size:26px;display:block;margin-bottom:4px;}
+  .howto span{font-size:12.5px;font-weight:700;color:var(--ink);line-height:1.25;display:block;}
+  .howto small{color:var(--muted);font-size:11px;font-weight:600;}
+
+  .btn{
+    border:none;cursor:pointer;font-family:inherit;font-weight:900;
+    border-radius:999px;color:#231303;
+    display:inline-flex;align-items:center;justify-content:center;gap:8px;
+    transition:transform .08s ease;
+  }
+  .btn:active{transform:scale(.96);}
+  .btn-play{
+    background:linear-gradient(180deg,#ffd76a,#ff9a1f);
+    box-shadow:0 6px 0 #b25f00,0 12px 24px rgba(0,0,0,.4);
+    font-size:24px;padding:16px 46px;width:100%;max-width:430px;
+    margin:4px 0 12px;
+  }
+  .btn-play:active{box-shadow:0 2px 0 #b25f00;}
+  .btn-green{
+    background:linear-gradient(180deg,#8bf36a,#3cb531);
+    box-shadow:0 5px 0 #1e7a16,0 10px 20px rgba(0,0,0,.35);
+    color:#0d2b06;font-size:19px;padding:13px 34px;
+  }
+  .btn-ghost{
+    background:rgba(255,255,255,.08);color:var(--ink);
+    border:1px solid rgba(255,255,255,.2);
+    font-size:15px;padding:11px 22px;box-shadow:none;
+  }
+  .row-btns{display:flex;gap:10px;flex-wrap:wrap;justify-content:center;}
+
+  .stat-row{display:flex;gap:10px;width:100%;max-width:430px;margin-bottom:14px;}
+  .stat{
+    flex:1;background:var(--panel);border:1px solid rgba(255,255,255,.09);
+    border-radius:14px;padding:10px;text-align:center;
+  }
+  .stat b{font-size:22px;display:block;color:#ffd76a;}
+  .stat span{font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.07em;}
+
+  .stars{font-size:44px;letter-spacing:6px;text-align:center;margin:2px 0 6px;}
+  .stars .on{color:#ffd23e;text-shadow:0 0 18px rgba(255,210,62,.7);}
+  .stars .off{color:rgba(255,255,255,.18);}
+  .stars .pop{display:inline-block;animation:starPop .5s ease backwards;}
+  .stars .pop:nth-child(2){animation-delay:.15s;}
+  .stars .pop:nth-child(3){animation-delay:.3s;}
+  @keyframes starPop{0%{transform:scale(0) rotate(-40deg);}70%{transform:scale(1.35);}100%{transform:scale(1);}}
+
+  h2.screen-head{font-size:30px;margin:6px 0 4px;font-weight:900;text-align:center;}
+  .sub{color:var(--muted);font-weight:600;text-align:center;margin:0 0 14px;font-size:14.5px;}
+
+  /* Toggles row */
+  .toggles{display:flex;gap:8px;justify-content:center;margin-top:auto;padding-top:14px;flex-wrap:wrap;}
+  .toggle-btn{
+    background:var(--panel);border:1px solid rgba(255,255,255,.14);color:var(--ink);
+    border-radius:999px;padding:9px 16px;font-weight:800;font-size:13.5px;cursor:pointer;
+    font-family:inherit;display:inline-flex;align-items:center;gap:6px;min-height:40px;
+  }
+  .toggle-btn .state{color:#8bf36a;}
+  .toggle-btn .state.off{color:#ff8a75;}
+
+  /* Ad placeholder */
+  .ad-slot{
+    width:100%;max-width:430px;margin-top:14px;
+    border:1.5px dashed rgba(255,255,255,.28);border-radius:12px;
+    color:var(--muted);text-align:center;
+    padding:12px 8px;font-size:12px;font-weight:700;letter-spacing:.14em;
+  }
+  .ad-slot b{display:block;font-size:13px;color:var(--ink);letter-spacing:.05em;margin-bottom:2px;}
+
+  /* Ad break overlay */
+  #adBreak{
+    position:absolute;inset:0;z-index:30;background:#050505;
+    display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;
+    text-align:center;padding:24px;
+  }
+  #adBreak .ad-frame{
+    width:min(86vw,340px);aspect-ratio:4/3;border-radius:14px;
+    background:linear-gradient(135deg,#233,#357 55%,#5a3);
+    display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;
+    font-weight:900;font-size:22px;color:#fff;padding:16px;
+  }
+  #adBreak .ad-tag{align-self:flex-start;background:#ffd23e;color:#111;font-size:11px;padding:3px 9px;border-radius:6px;letter-spacing:.1em;}
+  #adCount{font-size:15px;color:#bbb;font-weight:700;}
+
+  /* Pause overlay */
+  #pauseScreen{background:rgba(5,14,8,.82);justify-content:center;}
+
+  .toast{
+    position:absolute;left:50%;bottom:96px;transform:translateX(-50%) translateY(20px);
+    background:rgba(10,24,15,.92);border:1px solid rgba(255,255,255,.2);
+    padding:10px 20px;border-radius:999px;font-weight:800;font-size:15px;
+    opacity:0;pointer-events:none;z-index:20;transition:all .25s ease;white-space:nowrap;
+  }
+  .toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
+
+  /* ---------- Small phones: keep the whole HUD on one line ---------- */
+  @media (max-width:480px){
+    #hud{gap:5px;padding-left:8px;padding-right:8px;}
+    .hud-chip{padding:5px 9px;font-size:13px;gap:4px;}
+    .hud-chip small{font-size:9px;}
+    #hudScore{font-size:16px;}
+    #hudLives{font-size:13px;letter-spacing:0;}
+    .icon-btn{width:40px;height:40px;font-size:17px;}
+    .howto{gap:7px;}
+    .howto div{padding:9px 5px;}
+    .howto span{font-size:11.5px;}
+    .howto small{font-size:10px;}
+    .btn-play{font-size:21px;padding:14px 30px;}
+    .toast{bottom:78px;font-size:13.5px;max-width:92vw;white-space:normal;text-align:center;}
+  }
+  /* ---------- Short / landscape screens ---------- */
+  @media (max-height:520px){
+    .game-title{font-size:38px;}
+    .title-fruits{font-size:24px;}
+    .tagline{margin-bottom:8px;}
+    .howto{margin-bottom:8px;}
+    .btn-play{padding:11px 30px;font-size:20px;}
+    .ad-slot{margin-top:8px;padding:8px;}
+  }
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="stage">
+    <canvas id="game" role="img" aria-label="Fruit Slice game area — swipe to slice fruit, avoid bombs"></canvas>
+
+    <!-- HUD -->
+    <div id="hud" class="hidden">
+      <div class="hud-chip"><small data-i18n="score">Score</small><span id="hudScore">0</span></div>
+      <div class="hud-chip"><small data-i18n="wave">Wave</small><span id="hudWave">1</span></div>
+      <div class="hud-chip" id="hudLives" aria-label="Lives"></div>
+      <div class="hud-spacer"></div>
+      <button class="icon-btn" id="btnSoundHud" aria-label="Sound">🔊</button>
+      <button class="icon-btn" id="btnPause" aria-label="Pause">⏸</button>
+    </div>
+
+    <div id="waveBanner"></div>
+    <div class="toast" id="toast"></div>
+
+    <!-- HOME -->
+    <div class="screen" id="homeScreen">
+      <div class="title-fruits" aria-hidden="true">🍉🍊🍓</div>
+      <h1 class="game-title"><span class="t1">FRUIT</span> <span class="t2">SLICE</span></h1>
+      <p class="tagline" data-i18n="tagline">Swipe to slice the fruit. Dodge the bombs!</p>
+
+      <div class="card howto" style="background:transparent;border:none;padding:0;">
+        <div><span class="ic">👆</span><span data-i18n="h1">Swipe to slice</span><small data-i18n="h1s">finger or mouse</small></div>
+        <div><span class="ic">💣</span><span data-i18n="h2">Avoid bombs</span><small data-i18n="h2s">one hit = game over</small></div>
+        <div><span class="ic">🍍</span><span data-i18n="h3">Slice 3+ together</span><small data-i18n="h3s">combo bonus points</small></div>
+      </div>
+
+      <button class="btn btn-play" id="btnPlay">▶ <span data-i18n="play">PLAY</span></button>
+
+      <div class="stat-row">
+        <div class="stat"><b id="bestScore">0</b><span data-i18n="best">Best Score</span></div>
+        <div class="stat"><b id="bestCombo">0</b><span data-i18n="bestCombo">Best Combo</span></div>
+      </div>
+
+      <div class="ad-slot"><b>AD</b><span data-i18n="adSpace">Advertisement space</span></div>
+
+      <div class="toggles">
+        <button class="toggle-btn" id="btnLang">🌐 <span id="langLabel">हिन्दी</span></button>
+        <button class="toggle-btn" id="btnSound"><span id="soundIcon" aria-hidden="true">🔊</span> <span data-i18n="sound">Sound</span> <span class="state" id="soundState">ON</span></button>
+        <button class="toggle-btn" id="btnMusic"><span id="musicIcon" aria-hidden="true">🎵</span> <span data-i18n="music">Music</span> <span class="state" id="musicState">ON</span></button>
+      </div>
+    </div>
+
+    <!-- PAUSE -->
+    <div class="screen hidden" id="pauseScreen">
+      <h2 class="screen-head" data-i18n="paused">Paused</h2>
+      <p class="sub" data-i18n="pausedSub">Take a breath. The fruit can wait.</p>
+      <div class="row-btns">
+        <button class="btn btn-green" id="btnResume">▶ <span data-i18n="resume">Resume</span></button>
+        <button class="btn btn-ghost" id="btnQuit">🏠 <span data-i18n="home">Home</span></button>
+      </div>
+    </div>
+
+    <!-- GAME OVER -->
+    <div class="screen hidden" id="overScreen">
+      <h2 class="screen-head" id="overTitle">Game Over</h2>
+      <div class="stars" id="overStars"></div>
+      <p class="sub" id="overReason"></p>
+      <div class="stat-row">
+        <div class="stat"><b id="finalScore">0</b><span data-i18n="score">Score</span></div>
+        <div class="stat"><b id="finalSliced">0</b><span data-i18n="sliced">Fruit Sliced</span></div>
+        <div class="stat"><b id="finalCombo">0</b><span data-i18n="bestCombo">Best Combo</span></div>
+      </div>
+      <button class="btn btn-play" id="btnAgain">↻ <span data-i18n="playAgain">PLAY AGAIN</span></button>
+      <button class="btn btn-ghost" id="btnHome2">🏠 <span data-i18n="home">Home</span></button>
+      <div class="ad-slot"><b>AD</b><span data-i18n="adSpace">Advertisement space</span></div>
+    </div>
+
+    <!-- AD BREAK -->
+    <div id="adBreak" class="hidden">
+      <div class="ad-frame">
+        <span class="ad-tag">AD</span>
+        <div>🍉 Fruit Slice 🍓</div>
+        <div style="font-size:14px;font-weight:700;opacity:.85;" data-i18n="adSpace">Advertisement space</div>
+      </div>
+      <div id="adCount"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+"use strict";
+/* ============================================================
+   FRUIT SLICE — swipe to slice fruit, dodge bombs.
+   Canvas game, WebAudio sound + melody music, EN/HI toggle.
+   Best score, best combo and settings (language, sound, music)
+   are saved in localStorage under a versioned key and loaded
+   again on start, so they survive closing the page.
+   ============================================================ */
+
+/* ---------------- Save (localStorage) ---------------- */
+var SAVE_KEY = "fruitslice-save-v1";
+function loadSave(){
+  try {
+    var raw = window.localStorage.getItem(SAVE_KEY);
+    if (!raw) return null;
+    var d = JSON.parse(raw);
+    return (d && typeof d === "object") ? d : null;
+  } catch (e) { return null; }
+}
+function saveSave(){
+  try {
+    window.localStorage.setItem(SAVE_KEY, JSON.stringify({
+      v: 1,
+      bestScore: bestScore,
+      bestCombo: bestComboEver,
+      lang: lang,
+      soundOn: soundOn,
+      musicOn: musicOn
+    }));
+  } catch (e) { /* storage unavailable (private mode etc.) — game still works */ }
+}
+
+/* ---------------- i18n ---------------- */
+var I18N = {
+  en: {
+    tagline: "Swipe to slice the fruit. Dodge the bombs!",
+    h1: "Swipe to slice", h1s: "finger or mouse",
+    h2: "Avoid bombs", h2s: "one hit = game over",
+    h3: "Slice 3+ together", h3s: "combo bonus points",
+    play: "PLAY", playAgain: "PLAY AGAIN",
+    best: "Best Score", bestCombo: "Best Combo",
+    score: "Score", wave: "Wave", sliced: "Fruit Sliced",
+    sound: "Sound", music: "Music",
+    paused: "Paused", pausedSub: "Take a breath. The fruit can wait.",
+    resume: "Resume", home: "Home",
+    adSpace: "Advertisement space",
+    gameOver: "Game Over", bombHit: "Boom! You sliced a bomb 💣",
+    missedAll: "You missed 3 fruits!",
+    waveTxt: "WAVE", frenzy: "FRUIT FRENZY!",
+    combo: "COMBO", nice: "Nice!", great: "Great!", superTxt: "SUPER!",
+    adIn: "Your game continues in",
+    newBest: "New Best Score! 🏆"
+  },
+  hi: {
+    tagline: "उंगली घुमाकर फल काटो। बम से बचो!",
+    h1: "स्वाइप करके काटो", h1s: "उंगली या माउस",
+    h2: "बम से बचो", h2s: "एक बम = खेल खत्म",
+    h3: "3+ एक साथ काटो", h3s: "कॉम्बो बोनस अंक",
+    play: "खेलो", playAgain: "फिर से खेलो",
+    best: "सबसे अच्छा स्कोर", bestCombo: "सबसे अच्छा कॉम्बो",
+    score: "स्कोर", wave: "वेव", sliced: "कटे फल",
+    sound: "आवाज़", music: "संगीत",
+    paused: "रुका हुआ", pausedSub: "आराम करो। फल इंतज़ार कर सकता है।",
+    resume: "जारी रखो", home: "होम",
+    adSpace: "विज्ञापन की जगह",
+    gameOver: "खेल खत्म", bombHit: "धमाका! तुमने बम काट दिया 💣",
+    missedAll: "तुमने 3 फल छोड़ दिए!",
+    waveTxt: "वेव", frenzy: "फलों की बौछार!",
+    combo: "कॉम्बो", nice: "बढ़िया!", great: "शानदार!", superTxt: "सुपर!",
+    adIn: "आपका खेल जारी रहेगा",
+    newBest: "नया सबसे अच्छा स्कोर! 🏆"
+  }
+};
+var lang = "en";
+function t(k){ return (I18N[lang] && I18N[lang][k]) || I18N.en[k] || k; }
+function applyLang(){
+  var els = document.querySelectorAll("[data-i18n]");
+  for (var i=0;i<els.length;i++){ els[i].textContent = t(els[i].getAttribute("data-i18n")); }
+  document.getElementById("langLabel").textContent = (lang === "en") ? "हिन्दी" : "English";
+}
+
+/* ---------------- Audio ---------------- */
+var AC = null, soundOn = true, musicOn = true;
+var musicTimer = null, musicStep = 0;
+function audio(){
+  if (!AC){ try { AC = new (window.AudioContext || window.webkitAudioContext)(); } catch(e){ AC = null; } }
+  if (AC && AC.state === "suspended") AC.resume();
+  return AC;
+}
+function tone(freq, dur, type, vol, slideTo, delay){
+  var ac = audio(); if (!ac) return;
+  var t0 = ac.currentTime + (delay || 0);
+  var o = ac.createOscillator(), g = ac.createGain();
+  o.type = type || "sine"; o.frequency.setValueAtTime(freq, t0);
+  if (slideTo) o.frequency.exponentialRampToValueAtTime(slideTo, t0 + dur);
+  g.gain.setValueAtTime(0.0001, t0);
+  g.gain.exponentialRampToValueAtTime(vol || 0.15, t0 + 0.012);
+  g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+  o.connect(g); g.connect(ac.destination);
+  o.start(t0); o.stop(t0 + dur + 0.05);
+}
+function toneM(freq, dur, type, vol, delay){ /* music tone, gated by musicOn */
+  if (!musicOn) return;
+  var ac = audio(); if (!ac) return;
+  var t0 = ac.currentTime + (delay || 0);
+  var o = ac.createOscillator(), g = ac.createGain();
+  o.type = type; o.frequency.setValueAtTime(freq, t0);
+  g.gain.setValueAtTime(0.0001, t0);
+  g.gain.exponentialRampToValueAtTime(vol, t0 + 0.03);
+  g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+  o.connect(g); g.connect(ac.destination);
+  o.start(t0); o.stop(t0 + dur + 0.05);
+}
+function sfxSlice(){ if(!soundOn) return; tone(900 + Math.random()*500, 0.09, "sawtooth", 0.05, 220); tone(300, 0.06, "triangle", 0.08, 90); }
+function sfxCombo(n){ if(!soundOn) return; var base = 520 + n*60; tone(base,0.1,"triangle",0.12); tone(base*1.25,0.12,"triangle",0.12,null,0.07); tone(base*1.5,0.16,"triangle",0.12,null,0.14); }
+function sfxBomb(){ if(!soundOn) return; tone(160,0.5,"sawtooth",0.22,40); tone(70,0.6,"square",0.18,30,0.02); }
+function sfxMiss(){ if(!soundOn) return; tone(340,0.16,"triangle",0.09,180); }
+function sfxClick(){ if(!soundOn) return; tone(660,0.06,"triangle",0.08); }
+function sfxWave(){ if(!soundOn) return; tone(523,0.1,"triangle",0.1); tone(659,0.1,"triangle",0.1,null,0.08); tone(784,0.14,"triangle",0.11,null,0.16); }
+var lastWhoosh = 0;
+function sfxWhoosh(){
+  if(!soundOn) return;
+  var now = performance.now();
+  if (now - lastWhoosh < 95) return; /* throttle: one whoosh per fast swipe */
+  lastWhoosh = now;
+  tone(1500 + Math.random()*500, 0.08, "sawtooth", 0.028, 320);
+}
+/* Cheerful pentatonic melody (original) — two alternating phrases so the
+   loop does not feel repetitive: phrase B lifts higher, then back to A. */
+var MELODY = [523,587,659,784, 659,587,523,440, 494,523,587,659, 587,523,440,392];
+var BASS   = [131,0,196,0, 147,0,175,0, 131,0,196,0, 147,0,165,0];
+var MELODY2 = [659,784,880,784, 880,784,659,587, 523,587,659,784, 988,880,784,659];
+var BASS2   = [165,0,220,0, 175,0,220,0, 131,0,196,0, 147,0,196,0];
+function musicTick(){
+  if (!musicOn) return;
+  var bar = Math.floor(musicStep / 16) % 2;
+  var mel = bar ? MELODY2 : MELODY;
+  var bas = bar ? BASS2 : BASS;
+  var i = musicStep % 16;
+  toneM(mel[i], 0.34, "triangle", 0.055);
+  if (i % 2 === 0) toneM(mel[i] * 2, 0.2, "sine", 0.02);
+  if (bas[i]) toneM(bas[i], 0.4, "sine", 0.06);
+  musicStep++;
+}
+function startMusic(){ if (musicTimer) return; musicTimer = setInterval(musicTick, 300); }
+function stopMusic(){ if (musicTimer){ clearInterval(musicTimer); musicTimer = null; } }
+
+/* ---------------- Canvas setup ---------------- */
+var canvas = document.getElementById("game");
+var ctx = canvas.getContext("2d");
+var W = 0, H = 0, DPR = 1;
+function resize(){
+  DPR = Math.min(window.devicePixelRatio || 1, 2);
+  W = canvas.clientWidth; H = canvas.clientHeight;
+  canvas.width = Math.round(W * DPR); canvas.height = Math.round(H * DPR);
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+}
+window.addEventListener("resize", resize);
+
+/* ---------------- Fruit definitions ---------------- */
+/* Drawn with canvas vector art: body gradient, leaf, shine. */
+var FRUITS = [
+  { name:"watermelon", r:46, pts:10, out:"#2e9e44", out2:"#1c6b2c", in:"#ff5a5a", inEdge:"#ffe9c9", seed:"#402020" },
+  { name:"orange",     r:38, pts:8,  out:"#ff9a1f", out2:"#e06f00", in:"#ffb84d", inEdge:"#ffe3ae", seed:null },
+  { name:"apple",      r:36, pts:8,  out:"#e8362a", out2:"#a31414", in:"#fff3d6", inEdge:"#ffd9a0", seed:"#5a3a1a" },
+  { name:"lemon",      r:34, pts:7,  out:"#ffd83e", out2:"#e0ae00", in:"#fff3a0", inEdge:"#fffbd0", seed:null },
+  { name:"kiwi",       r:32, pts:7,  out:"#7a5a2e", out2:"#543d1c", in:"#9ede4e", inEdge:"#e8ffb0", seed:"#2e4416" },
+  { name:"strawberry", r:34, pts:9,  out:"#ff3b5c", out2:"#c21330", in:"#ff7d95", inEdge:"#ffc2cf", seed:"#ffe9a8" },
+  { name:"mango",      r:38, pts:9,  out:"#ffb02e", out2:"#f07000", in:"#ffd76a", inEdge:"#ffedb5", seed:null },
+  { name:"pineapple",  r:42, pts:12, out:"#f2b01e", out2:"#c07f00", in:"#ffe066", inEdge:"#fff3ae", seed:null },
+  { name:"golden",     r:38, pts:25, out:"#ffe259", out2:"#f5a623", in:"#fff7ae", inEdge:"#ffffff", seed:null, golden:true }
+];
+
+/* ---------------- Game state ---------------- */
+var MODE = "home"; /* home | playing | paused | over | ad */
+var fruits = [], halves = [], particles = [], splashes = [], floaters = [];
+var score = 0, slicedCount = 0, lives = 3, wave = 1;
+var bestScore = 0, bestComboEver = 0;
+var spawnTimer = 0, waveFruitLeft = 0, wavePause = 0, elapsed = 0;
+var comboCount = 0, comboTimer = 0, runBestCombo = 0;
+var shake = 0, flashRed = 0, gamesPlayed = 0, gameRun = 0;
+var blade = []; /* recent pointer points {x,y,t} */
+var pointerDown = false;
+
+function rand(a,b){ return a + Math.random()*(b-a); }
+function pick(arr){ return arr[Math.floor(Math.random()*arr.length)]; }
+
+function newFruit(x, vx, vy, def, isBomb){
+  return {
+    x:x, y:H + 60, vx:vx, vy:vy, rot:rand(0, Math.PI*2), vr:rand(-1.6,1.6),
+    r:def ? def.r : 30, def:def, bomb:!!isBomb, sliced:false, missed:false,
+    wob:rand(0, Math.PI*2)
+  };
+}
+function launchWave(){
+  waveFruitLeft = 4 + Math.min(10, wave * 2);
+  spawnTimer = 0.2;
+  showWaveBanner(t("waveTxt") + " " + wave);
+  sfxWave();
+}
+function spawnOne(){
+  var margin = 60;
+  var x = rand(margin, Math.max(margin+1, W - margin));
+  var vx = rand(-40, 40) + (W/2 - x) * rand(0.1, 0.35);
+  var vy = -rand(H*1.18, H*1.38) - wave * 12;
+  var roll = Math.random();
+  var bombChance = wave < 2 ? 0 : Math.min(0.10 + wave * 0.012, 0.24);
+  if (roll < bombChance){
+    fruits.push(newFruit(x, vx, vy, null, true));
+  } else if (roll > 0.975){
+    fruits.push(newFruit(x, vx, vy, FRUITS[FRUITS.length-1], false)); /* golden */
+  } else {
+    fruits.push(newFruit(x, vx, vy, pick(FRUITS.slice(0, FRUITS.length-1)), false));
+  }
+  waveFruitLeft--;
+}
+
+/* ---------------- Slicing ---------------- */
+function segCircle(x1,y1,x2,y2,cx,cy,r){
+  var dx = x2-x1, dy = y2-y1;
+  var l2 = dx*dx + dy*dy;
+  var tt = l2 ? ((cx-x1)*dx + (cy-y1)*dy) / l2 : 0;
+  tt = Math.max(0, Math.min(1, tt));
+  var px = x1 + tt*dx, py = y1 + tt*dy;
+  var ddx = cx-px, ddy = cy-py;
+  return (ddx*ddx + ddy*ddy) <= r*r;
+}
+function trySlice(x1,y1,x2,y2){
+  var speed = Math.hypot(x2-x1, y2-y1);
+  if (speed < 6) return;
+  var ang = Math.atan2(y2-y1, x2-x1);
+  for (var i=0;i<fruits.length;i++){
+    var f = fruits[i];
+    if (f.sliced) continue;
+    if (segCircle(x1,y1,x2,y2, f.x, f.y, f.r + 6)){
+      sliceFruit(f, ang);
+    }
+  }
+}
+function sliceFruit(f, ang){
+  f.sliced = true;
+  if (f.bomb){
+    explode(f);
+    return;
+  }
+  /* two halves */
+  var nx = Math.cos(ang + Math.PI/2), ny = Math.sin(ang + Math.PI/2);
+  for (var s=-1; s<=1; s+=2){
+    halves.push({
+      x:f.x, y:f.y, vx:f.vx + nx*90*s + rand(-20,20), vy:f.vy*0.55 + ny*60*s - 40,
+      rot:f.rot, vr:f.vr + s*2.4, r:f.r, def:f.def, side:s, ang:ang, life:1
+    });
+  }
+  /* juice particles + wall splash */
+  for (var i=0;i<16 && particles.length < 320;i++){
+    var a = rand(0, Math.PI*2), sp = rand(40, 260);
+    particles.push({ x:f.x, y:f.y, vx:Math.cos(a)*sp, vy:Math.sin(a)*sp - 60,
+      r:rand(2,5.5), color:f.def.in, life:1, decay:rand(0.9,1.6) });
+  }
+  splashes.push({ x:f.x + rand(-14,14), y:f.y + rand(-14,14), r:f.r*rand(0.7,1.15), color:f.def.in, alpha:0.5 });
+  if (splashes.length > 14) splashes.shift();
+
+  comboCount++; comboTimer = 0.7;
+  if (comboCount > runBestCombo) runBestCombo = comboCount;
+  var pts = f.def.pts;
+  score += pts; slicedCount++;
+  addFloater(f.x, f.y - f.r - 6, "+" + pts, "#ffd76a", 20);
+  sfxSlice();
+  updateHUD();
+}
+function explode(f){
+  shake = 16; flashRed = 0.55;
+  for (var i=0;i<30 && particles.length < 340;i++){
+    var a = rand(0, Math.PI*2), sp = rand(60, 380);
+    particles.push({ x:f.x, y:f.y, vx:Math.cos(a)*sp, vy:Math.sin(a)*sp,
+      r:rand(2,6), color: pick(["#ff5a3c","#ffb02e","#666","#999"]), life:1, decay:rand(1,1.8) });
+  }
+  sfxBomb();
+  endGame(t("bombHit"));
+}
+function addFloater(x, y, txt, color, size){
+  floaters.push({ x:x, y:y, txt:txt, color:color, size:size, life:1 });
+}
+function showToast(msg){
+  var el = document.getElementById("toast");
+  el.textContent = msg; el.classList.add("show");
+  clearTimeout(showToast._t);
+  showToast._t = setTimeout(function(){ el.classList.remove("show"); }, 1600);
+}
+function showWaveBanner(msg){
+  var el = document.getElementById("waveBanner");
+  el.textContent = msg;
+  el.classList.remove("show");
+  void el.offsetWidth;
+  el.classList.add("show");
+}
+
+/* ---------------- Flow ---------------- */
+var screens = {
+  home: document.getElementById("homeScreen"),
+  pause: document.getElementById("pauseScreen"),
+  over: document.getElementById("overScreen"),
+  ad: document.getElementById("adBreak")
+};
+function showScreen(name){
+  for (var k in screens) screens[k].classList.toggle("hidden", k !== name);
+  document.getElementById("hud").classList.toggle("hidden", !(MODE === "playing" || MODE === "paused"));
+}
+function startGame(){
+  gameRun++; /* cancels any frenzy timers left over from a previous run */
+  audio(); if (musicOn) startMusic();
+  fruits = []; halves = []; particles = []; floaters = []; splashes = [];
+  score = 0; slicedCount = 0; lives = 3; wave = 1;
+  comboCount = 0; comboTimer = 0; runBestCombo = 0;
+  elapsed = 0; shake = 0; flashRed = 0;
+  MODE = "playing";
+  launchWave();
+  updateHUD();
+  showScreen(null);
+  document.getElementById("hud").classList.remove("hidden");
+}
+function endGame(reason){
+  if (MODE !== "playing") return;
+  MODE = "over";
+  gamesPlayed++;
+  var isBest = score > bestScore;
+  if (isBest) bestScore = score;
+  if (runBestCombo > bestComboEver) bestComboEver = runBestCombo;
+  document.getElementById("bestScore").textContent = bestScore;
+  document.getElementById("bestCombo").textContent = bestComboEver;
+  saveSave();
+  document.getElementById("overTitle").textContent = t("gameOver");
+  document.getElementById("overReason").textContent = reason + (isBest && score > 0 ? " · " + t("newBest") : "");
+  document.getElementById("finalScore").textContent = score;
+  document.getElementById("finalSliced").textContent = slicedCount;
+  document.getElementById("finalCombo").textContent = runBestCombo;
+  var stars = score >= 300 ? 3 : score >= 150 ? 2 : score >= 50 ? 1 : 0;
+  var sh = "";
+  for (var i=0;i<3;i++) sh += '<span class="pop ' + (i < stars ? "on" : "off") + '">★</span>';
+  document.getElementById("overStars").innerHTML = sh;
+  updateHUD();
+  /* Ad break after every 2nd game over */
+  if (gamesPlayed % 2 === 0){
+    showAdBreak(function(){ showScreen("over"); });
+  } else {
+    showScreen("over");
+  }
+}
+function showAdBreak(done){
+  MODE = "ad";
+  showScreen("ad");
+  var left = 3;
+  var el = document.getElementById("adCount");
+  el.textContent = t("adIn") + " " + left + "…";
+  var iv = setInterval(function(){
+    left--;
+    if (left <= 0){
+      clearInterval(iv);
+      MODE = "over";
+      done();
+    } else {
+      el.textContent = t("adIn") + " " + left + "…";
+    }
+  }, 1000);
+}
+function pauseGame(){
+  if (MODE !== "playing") return;
+  MODE = "paused";
+  pointerDown = false; blade = [];
+  showScreen("pause");
+}
+/* Auto-pause when the player leaves the game mid-run — no unfair lost lives */
+document.addEventListener("visibilitychange", function(){
+  if (document.hidden) pauseGame();
+});
+window.addEventListener("blur", function(){ pauseGame(); });
+function resumeGame(){
+  if (MODE !== "paused") return;
+  MODE = "playing";
+  showScreen(null);
+  document.getElementById("hud").classList.remove("hidden");
+}
+function goHome(){
+  gameRun++;
+  MODE = "home";
+  fruits = []; halves = []; particles = []; floaters = [];
+  showScreen("home");
+}
+function updateHUD(){
+  document.getElementById("hudScore").textContent = score;
+  document.getElementById("hudWave").textContent = wave;
+  var h = "";
+  for (var i=0;i<3;i++) h += '<span class="' + (i < lives ? "" : "lost") + '">🍓</span>';
+  document.getElementById("hudLives").innerHTML = h;
+  document.getElementById("btnSoundHud").textContent = soundOn ? "🔊" : "🔇";
+}
+
+/* ---------------- Update ---------------- */
+var GRAV = 1500;
+function update(dt){
+  elapsed += dt;
+  if (shake > 0) shake = Math.max(0, shake - dt*30);
+  if (flashRed > 0) flashRed = Math.max(0, flashRed - dt);
+
+  /* combo window */
+  if (comboTimer > 0){
+    comboTimer -= dt;
+    if (comboTimer <= 0){
+      if (comboCount >= 3){
+        var bonus = comboCount * 5;
+        score += bonus;
+        addFloater(W/2, H*0.3, t("combo") + " x" + comboCount + "  +" + bonus, "#8bf36a", 30);
+        sfxCombo(comboCount);
+        if (comboCount >= 5) showToast(t("superTxt") + " 🔥");
+        else if (comboCount >= 4) showToast(t("great"));
+        else showToast(t("nice"));
+        updateHUD();
+      }
+      comboCount = 0;
+    }
+  }
+
+  if (MODE === "playing"){
+    /* spawning */
+    if (waveFruitLeft > 0){
+      spawnTimer -= dt;
+      if (spawnTimer <= 0){
+        spawnOne();
+        if (Math.random() < 0.3 && waveFruitLeft > 0) spawnOne();
+        spawnTimer = rand(0.55, 1.05) - Math.min(0.3, wave * 0.02);
+      }
+    } else if (fruits.length === 0){
+      wavePause -= dt;
+      if (wavePause <= 0){
+        wave++;
+        if (wave % 4 === 0){
+          showWaveBanner(t("frenzy"));
+          var gid = gameRun;
+          for (var fi=0; fi<6; fi++){
+            (function(delay){
+              setTimeout(function(){ if (gameRun === gid) spawnFrenzy(); }, delay);
+            })(fi*110);
+          }
+          /* the 6 frenzy fruits are part of the wave total, not extra */
+          waveFruitLeft = Math.max(0, 4 + Math.min(10, wave * 2) - 6);
+        } else {
+          launchWave();
+        }
+        wavePause = 1.2;
+        updateHUD();
+      }
+    } else {
+      wavePause = 1.0;
+    }
+  }
+
+  /* physics: fruits */
+  for (var i=fruits.length-1; i>=0; i--){
+    var f = fruits[i];
+    if (f.sliced){ fruits.splice(i,1); continue; } /* halves carry the visual now */
+    f.vy += GRAV * dt;
+    f.x += f.vx * dt; f.y += f.vy * dt; f.rot += f.vr * dt;
+    if (f.y - f.r > H + 80 && f.vy > 0){
+      fruits.splice(i,1);
+      if (MODE === "playing" && !f.bomb && !f.sliced){
+        if (f.def && f.def.golden){
+          /* bonus fruit: missing it costs no life */
+          addFloater(f.x, H - 60, "★", "#ffd76a", 26);
+        } else {
+          lives--;
+          sfxMiss();
+          flashRed = Math.max(flashRed, 0.15);
+          addFloater(f.x, H - 60, "✕", "#ff6b57", 30);
+          shake = Math.max(shake, 5);
+          updateHUD();
+          if (lives <= 0){ endGame(t("missedAll")); }
+        }
+      }
+    }
+  }
+  /* halves */
+  for (var j=halves.length-1; j>=0; j--){
+    var hf = halves[j];
+    hf.vy += GRAV * dt;
+    hf.x += hf.vx * dt; hf.y += hf.vy * dt; hf.rot += hf.vr * dt;
+    if (hf.y - hf.r > H + 90) halves.splice(j,1);
+  }
+  /* particles */
+  for (var p=particles.length-1; p>=0; p--){
+    var pt = particles[p];
+    pt.vy += GRAV * 0.55 * dt;
+    pt.x += pt.vx * dt; pt.y += pt.vy * dt;
+    pt.life -= pt.decay * dt;
+    if (pt.life <= 0) particles.splice(p,1);
+  }
+  /* floaters */
+  for (var q=floaters.length-1; q>=0; q--){
+    var fl = floaters[q];
+    fl.y -= 46 * dt; fl.life -= dt * 0.9;
+    if (fl.life <= 0) floaters.splice(q,1);
+  }
+  /* blade trail decay */
+  var now = performance.now();
+  while (blade.length && now - blade[0].t > 110) blade.shift();
+}
+function spawnFrenzy(){
+  if (MODE !== "playing") return;
+  var margin = 60;
+  var x = rand(margin, Math.max(margin+1, W - margin));
+  var vx = rand(-40,40) + (W/2 - x) * 0.2;
+  var f = newFruit(x, vx, -rand(H*1.20, H*1.40), pick(FRUITS.slice(0, FRUITS.length-1)), false);
+  fruits.push(f);
+}
+
+/* ---------------- Drawing ---------------- */
+var bgGrad = null, bgGradH = 0;
+function drawBackground(){
+  if (!bgGrad || bgGradH !== H){ /* cache: rebuilt only when height changes */
+    bgGrad = ctx.createLinearGradient(0,0,0,H);
+    bgGrad.addColorStop(0, "#274d33");
+    bgGrad.addColorStop(0.55, "#1d3d27");
+    bgGrad.addColorStop(1, "#122a1a");
+    bgGradH = H;
+  }
+  ctx.fillStyle = bgGrad;
+  ctx.fillRect(0,0,W,H);
+  /* soft drifting light motes — keeps the background feeling alive */
+  var nowS = performance.now() / 1000;
+  ctx.fillStyle = "rgba(255,240,180,0.10)";
+  for (var m=0; m<12; m++){
+    var mx = ((m * 197.3) % Math.max(W,1)) + Math.sin(nowS * 0.35 + m * 1.7) * 22;
+    var my = ((m * 131.7 + nowS * 14 * (0.6 + (m % 3) * 0.3)) % Math.max(H,1));
+    ctx.beginPath(); ctx.arc(mx, H - my, 2.2 + (m % 3), 0, Math.PI*2); ctx.fill();
+  }
+  /* wooden board planks at bottom */
+  ctx.fillStyle = "rgba(0,0,0,0.18)";
+  for (var x = 0; x < W; x += 64) ctx.fillRect(x, H-46, 2, 46);
+  ctx.fillStyle = "#5a4026";
+  ctx.fillRect(0, H-46, W, 46);
+  ctx.fillStyle = "#6d4e2e";
+  ctx.fillRect(0, H-46, W, 5);
+  /* juice splashes stuck on the wall */
+  for (var i=0;i<splashes.length;i++){
+    var s = splashes[i];
+    ctx.globalAlpha = s.alpha * 0.5;
+    ctx.fillStyle = s.color;
+    ctx.beginPath();
+    ctx.ellipse(s.x, s.y, s.r, s.r*0.72, 0.4, 0, Math.PI*2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.ellipse(s.x + s.r*0.5, s.y + s.r*0.4, s.r*0.35, s.r*0.25, 0.9, 0, Math.PI*2);
+    ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+}
+function circleGrad(x, y, r, c1, c2){
+  var g = ctx.createRadialGradient(x - r*0.35, y - r*0.4, r*0.15, x, y, r);
+  g.addColorStop(0, c1); g.addColorStop(1, c2);
+  return g;
+}
+function drawFruitBody(f){
+  var d = f.def;
+  ctx.save();
+  ctx.translate(f.x, f.y);
+  if (d.golden){
+    /* pulsing halo so the bonus fruit reads as special at a glance */
+    var pulse = 0.5 + 0.5 * Math.sin(performance.now() / 180);
+    ctx.globalAlpha = 0.35 + pulse * 0.4;
+    ctx.fillStyle = "#ffe259";
+    ctx.beginPath(); ctx.arc(0, 0, f.r + 7 + pulse * 4, 0, Math.PI*2); ctx.fill();
+    ctx.globalAlpha = 1;
+  }
+  ctx.rotate(f.rot);
+  /* body */
+  ctx.fillStyle = circleGrad(0, 0, f.r, d.out, d.out2);
+  ctx.beginPath(); ctx.arc(0, 0, f.r, 0, Math.PI*2); ctx.fill();
+  if (d.name === "pineapple"){
+    ctx.strokeStyle = "rgba(120,70,0,0.4)"; ctx.lineWidth = 2;
+    for (var i=-2;i<=2;i++){
+      ctx.beginPath(); ctx.moveTo(i*f.r/2.4, -f.r); ctx.lineTo(i*f.r/2.4 + f.r*0.4, f.r); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(i*f.r/2.4, -f.r); ctx.lineTo(i*f.r/2.4 - f.r*0.4, f.r); ctx.stroke();
+    }
+    ctx.fillStyle = "#2fae4e";
+    for (var l=-1;l<=1;l++){
+      ctx.beginPath();
+      ctx.ellipse(l*8, -f.r - 8, 5, 13, l*0.4, 0, Math.PI*2);
+      ctx.fill();
+    }
+  }
+  if (d.name === "strawberry"){
+    ctx.fillStyle = "#2fae4e";
+    ctx.beginPath();
+    ctx.ellipse(0, -f.r + 3, f.r*0.5, 7, 0, 0, Math.PI*2);
+    ctx.fill();
+  }
+  if (d.name === "apple" || d.name === "orange" || d.name === "mango" || d.name === "golden"){
+    ctx.strokeStyle = "#5a3a1a"; ctx.lineWidth = 3.5;
+    ctx.beginPath(); ctx.moveTo(0, -f.r + 2); ctx.quadraticCurveTo(2, -f.r - 8, 6, -f.r - 10); ctx.stroke();
+    ctx.fillStyle = "#3cb531";
+    ctx.beginPath(); ctx.ellipse(9, -f.r - 6, 8, 4.5, 0.5, 0, Math.PI*2); ctx.fill();
+  }
+  if (d.name === "watermelon"){
+    ctx.strokeStyle = "rgba(10,60,20,0.5)"; ctx.lineWidth = 5;
+    for (var wI=-2; wI<=2; wI++){
+      ctx.beginPath();
+      ctx.moveTo(wI * f.r/2.6, -f.r + 4);
+      ctx.quadraticCurveTo(wI * f.r/2.6 + 6, 0, wI * f.r/2.6, f.r - 4);
+      ctx.stroke();
+    }
+  }
+  /* shine */
+  ctx.fillStyle = "rgba(255,255,255,0.35)";
+  ctx.beginPath();
+  ctx.ellipse(-f.r*0.36, -f.r*0.42, f.r*0.2, f.r*0.12, -0.6, 0, Math.PI*2);
+  ctx.fill();
+  if (d.golden){
+    ctx.fillStyle = "rgba(255,255,255,0.85)";
+    ctx.font = "bold " + Math.round(f.r*0.5) + "px sans-serif";
+    ctx.textAlign = "center"; ctx.textBaseline = "middle";
+    ctx.fillText("★", 0, 2);
+  }
+  ctx.restore();
+}
+function drawBomb(f){
+  ctx.save();
+  ctx.translate(f.x, f.y);
+  ctx.rotate(f.rot * 0.4);
+  ctx.fillStyle = circleGrad(0, 0, f.r, "#5a5f6b", "#17181d");
+  ctx.beginPath(); ctx.arc(0, 0, f.r, 0, Math.PI*2); ctx.fill();
+  ctx.fillStyle = "#2c2e35";
+  ctx.fillRect(-7, -f.r - 9, 14, 10);
+  ctx.strokeStyle = "#c9a86a"; ctx.lineWidth = 3;
+  ctx.beginPath(); ctx.moveTo(0, -f.r - 9); ctx.quadraticCurveTo(10, -f.r - 20, 16, -f.r - 14); ctx.stroke();
+  /* spark */
+  var tw = 3 + Math.sin(performance.now()/70) * 1.6;
+  ctx.fillStyle = "#ffd23e";
+  ctx.beginPath(); ctx.arc(17, -f.r - 13, tw + 2.4, 0, Math.PI*2); ctx.fill();
+  ctx.fillStyle = "#ff7518";
+  ctx.beginPath(); ctx.arc(17, -f.r - 13, tw, 0, Math.PI*2); ctx.fill();
+  /* shine + skull dot */
+  ctx.fillStyle = "rgba(255,255,255,0.4)";
+  ctx.beginPath(); ctx.ellipse(-f.r*0.34, -f.r*0.4, f.r*0.18, f.r*0.1, -0.6, 0, Math.PI*2); ctx.fill();
+  ctx.fillStyle = "#ff5a3c";
+  ctx.font = "bold " + Math.round(f.r*0.62) + "px sans-serif";
+  ctx.textAlign = "center"; ctx.textBaseline = "middle";
+  ctx.fillText("✕", 0, 3);
+  ctx.restore();
+}
+function drawHalf(hf){
+  var d = hf.def;
+  ctx.save();
+  ctx.translate(hf.x, hf.y);
+  ctx.rotate(hf.rot);
+  /* clip to one side of the cut */
+  ctx.beginPath();
+  ctx.rect(-hf.r - 3, hf.side < 0 ? -hf.r - 3 : 0, hf.r*2 + 6, hf.r + 3);
+  ctx.clip();
+  /* outer skin */
+  ctx.fillStyle = circleGrad(0, 0, hf.r, d.out, d.out2);
+  ctx.beginPath(); ctx.arc(0, 0, hf.r, 0, Math.PI*2); ctx.fill();
+  /* inner flesh */
+  ctx.fillStyle = d.in;
+  ctx.beginPath(); ctx.arc(0, 0, hf.r * 0.8, 0, Math.PI*2); ctx.fill();
+  ctx.strokeStyle = d.inEdge; ctx.lineWidth = 3.5;
+  ctx.beginPath(); ctx.arc(0, 0, hf.r * 0.88, 0, Math.PI*2); ctx.stroke();
+  /* seeds */
+  if (d.seed){
+    ctx.fillStyle = d.seed;
+    var seeds = [[-0.3,-0.2],[0.25,-0.3],[0,-0.45],[0.35,0.25],[-0.35,0.3],[0.05,0.1]];
+    for (var i=0;i<seeds.length;i++){
+      ctx.beginPath();
+      ctx.ellipse(seeds[i][0]*hf.r, seeds[i][1]*hf.r, 2.4, 3.6, 0.4, 0, Math.PI*2);
+      ctx.fill();
+    }
+  }
+  ctx.restore();
+  /* flat cut face sheen */
+  ctx.save();
+  ctx.translate(hf.x, hf.y);
+  ctx.rotate(hf.ang);
+  ctx.fillStyle = "rgba(255,255,255,0.20)";
+  ctx.fillRect(-hf.r*0.85, hf.side < 0 ? -2.5 : -0.5, hf.r*1.7, 2.4);
+  ctx.restore();
+}
+function drawBlade(){
+  if (blade.length < 2) return;
+  ctx.save();
+  ctx.lineCap = "round"; ctx.lineJoin = "round";
+  for (var pass=0; pass<2; pass++){
+    ctx.beginPath();
+    for (var i=0;i<blade.length;i++){
+      var p = blade[i];
+      if (i===0) ctx.moveTo(p.x, p.y); else ctx.lineTo(p.x, p.y);
+    }
+    if (pass === 0){
+      ctx.strokeStyle = "rgba(160,230,255,0.35)"; ctx.lineWidth = 11;
+    } else {
+      ctx.strokeStyle = "rgba(255,255,255,0.95)"; ctx.lineWidth = 4;
+    }
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+function draw(){
+  ctx.save();
+  if (shake > 0) ctx.translate(rand(-shake, shake)*0.5, rand(-shake, shake)*0.5);
+  drawBackground();
+  var i;
+  /* soft shadows on the board under flying fruit — grounds the motion */
+  for (i=0;i<fruits.length;i++){
+    var sf = fruits[i];
+    if (sf.sliced || sf.y > H) continue;
+    var hf2 = Math.max(0.15, Math.min(1, 1 - (H - sf.y) / (H * 1.25)));
+    ctx.globalAlpha = 0.22 * hf2;
+    ctx.fillStyle = "#000";
+    ctx.beginPath();
+    ctx.ellipse(sf.x, H - 22, sf.r * (0.45 + hf2 * 0.45), 6 + hf2 * 3, 0, 0, Math.PI*2);
+    ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+  for (i=0;i<halves.length;i++) drawHalf(halves[i]);
+  for (i=0;i<fruits.length;i++){
+    if (fruits[i].sliced) continue; /* sliced fruit is replaced by its halves */
+    if (fruits[i].bomb) drawBomb(fruits[i]); else drawFruitBody(fruits[i]);
+  }
+  /* particles */
+  for (i=0;i<particles.length;i++){
+    var p = particles[i];
+    ctx.globalAlpha = Math.max(0, p.life);
+    ctx.fillStyle = p.color;
+    ctx.beginPath(); ctx.arc(p.x, p.y, p.r, 0, Math.PI*2); ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+  drawBlade();
+  /* floaters */
+  ctx.textAlign = "center"; ctx.textBaseline = "middle";
+  for (i=0;i<floaters.length;i++){
+    var fl = floaters[i];
+    ctx.globalAlpha = Math.max(0, fl.life);
+    ctx.font = "900 " + fl.size + "px 'Trebuchet MS', sans-serif";
+    ctx.lineWidth = 4; ctx.strokeStyle = "rgba(0,0,0,0.45)";
+    ctx.strokeText(fl.txt, fl.x, fl.y);
+    ctx.fillStyle = fl.color;
+    ctx.fillText(fl.txt, fl.x, fl.y);
+  }
+  ctx.globalAlpha = 1;
+  /* combo meter */
+  if (MODE === "playing" && comboCount >= 2 && comboTimer > 0){
+    ctx.font = "900 24px 'Trebuchet MS', sans-serif";
+    ctx.textAlign = "center";
+    ctx.lineWidth = 5; ctx.strokeStyle = "rgba(0,0,0,0.45)";
+    var ct = t("combo") + " x" + comboCount;
+    ctx.strokeText(ct, W/2, 86);
+    ctx.fillStyle = "#8bf36a";
+    ctx.fillText(ct, W/2, 86);
+  }
+  ctx.restore();
+  if (flashRed > 0){
+    ctx.fillStyle = "rgba(255,40,20," + (flashRed * 0.4) + ")";
+    ctx.fillRect(0,0,W,H);
+  }
+}
+
+/* ---------------- Main loop ---------------- */
+var lastTime = 0;
+function loop(ts){
+  requestAnimationFrame(loop);
+  var dt = Math.min(0.033, (ts - lastTime) / 1000 || 0.016);
+  lastTime = ts;
+  if (MODE !== "paused") update(dt);
+  draw();
+}
+
+/* ---------------- Input ---------------- */
+function pointerPos(e){
+  var rect = canvas.getBoundingClientRect();
+  var cx = (e.touches ? e.touches[0].clientX : e.clientX);
+  var cy = (e.touches ? e.touches[0].clientY : e.clientY);
+  return { x: cx - rect.left, y: cy - rect.top };
+}
+function onDown(e){
+  if (MODE !== "playing") return;
+  audio();
+  pointerDown = true;
+  var p = pointerPos(e);
+  blade = [{ x:p.x, y:p.y, t:performance.now() }];
+}
+function onMove(e){
+  if (!pointerDown || MODE !== "playing") return;
+  if (e.cancelable) e.preventDefault();
+  var p = pointerPos(e);
+  var last = blade[blade.length-1];
+  blade.push({ x:p.x, y:p.y, t:performance.now() });
+  if (blade.length > 22) blade.shift();
+  if (last){
+    if (Math.hypot(p.x - last.x, p.y - last.y) > 26) sfxWhoosh();
+    trySlice(last.x, last.y, p.x, p.y);
+  }
+}
+function onUp(){ pointerDown = false; blade = []; }
+canvas.addEventListener("touchstart", onDown, { passive:true });
+canvas.addEventListener("touchmove", onMove, { passive:false });
+canvas.addEventListener("touchend", onUp);
+canvas.addEventListener("touchcancel", onUp);
+canvas.addEventListener("mousedown", onDown);
+canvas.addEventListener("mousemove", onMove);
+canvas.addEventListener("mouseup", onUp);
+canvas.addEventListener("mouseleave", onUp);
+
+/* Home screen ambient fruit */
+setInterval(function(){
+  if (MODE === "home" && fruits.length < 3 && Math.random() < 0.6){
+    var margin = 60;
+    var x = rand(margin, Math.max(margin+1, W - margin));
+    var f = newFruit(x, rand(-30,30), -rand(H*0.95, H*1.15), pick(FRUITS.slice(0, FRUITS.length-1)), false);
+    f.y = H + 60;
+    fruits.push(f);
+  }
+}, 900);
+
+/* ---------------- Buttons ---------------- */
+function bind(id, fn){
+  document.getElementById(id).addEventListener("click", function(){ audio(); fn(); });
+}
+bind("btnPlay", function(){ sfxClick(); startGame(); });
+bind("btnAgain", function(){ sfxClick(); startGame(); });
+bind("btnHome2", function(){ sfxClick(); goHome(); });
+bind("btnQuit", function(){ sfxClick(); goHome(); });
+bind("btnResume", function(){ sfxClick(); resumeGame(); });
+bind("btnPause", function(){ sfxClick(); pauseGame(); });
+bind("btnSoundHud", function(){
+  soundOn = !soundOn;
+  updateHUD(); syncToggles();
+  saveSave();
+  if (soundOn) sfxClick();
+});
+bind("btnLang", function(){
+  lang = (lang === "en") ? "hi" : "en";
+  applyLang(); sfxClick();
+  saveSave();
+});
+bind("btnSound", function(){
+  soundOn = !soundOn;
+  updateHUD(); syncToggles();
+  saveSave();
+  if (soundOn) sfxClick();
+});
+bind("btnMusic", function(){
+  musicOn = !musicOn;
+  if (musicOn){ startMusic(); } else { stopMusic(); }
+  syncToggles(); sfxClick();
+  saveSave();
+});
+function syncToggles(){
+  var ss = document.getElementById("soundState");
+  ss.textContent = soundOn ? "ON" : "OFF";
+  ss.className = "state" + (soundOn ? "" : " off");
+  var ms = document.getElementById("musicState");
+  ms.textContent = musicOn ? "ON" : "OFF";
+  ms.className = "state" + (musicOn ? "" : " off");
+  document.getElementById("soundIcon").textContent = soundOn ? "🔊" : "🔇";
+  document.getElementById("musicIcon").textContent = musicOn ? "🎵" : "🔕";
+}
+/* Keyboard controls: Space/Enter starts, P or Esc pauses/resumes */
+document.addEventListener("keydown", function(e){
+  var tag = (e.target && e.target.tagName) || "";
+  if (e.code === "KeyP" || e.code === "Escape"){
+    if (MODE === "playing"){ pauseGame(); }
+    else if (MODE === "paused"){ resumeGame(); }
+  } else if ((e.code === "Space" || e.code === "Enter") && tag !== "BUTTON"){
+    if (MODE === "home" || MODE === "over"){ e.preventDefault(); startGame(); }
+  }
+});
+
+/* start music on first interaction anywhere (browser policy) */
+document.addEventListener("pointerdown", function once(){
+  audio();
+  if (musicOn) startMusic();
+  document.removeEventListener("pointerdown", once);
+});
+
+/* ---------------- Init ---------------- */
+/* Load saved best score, best combo and settings (if any) */
+(function(){
+  var d = loadSave();
+  if (d){
+    if (typeof d.bestScore === "number" && d.bestScore > 0) bestScore = d.bestScore;
+    if (typeof d.bestCombo === "number" && d.bestCombo > 0) bestComboEver = d.bestCombo;
+    if (d.lang === "en" || d.lang === "hi") lang = d.lang;
+    if (typeof d.soundOn === "boolean") soundOn = d.soundOn;
+    if (typeof d.musicOn === "boolean") musicOn = d.musicOn;
+  }
+  document.getElementById("bestScore").textContent = bestScore;
+  document.getElementById("bestCombo").textContent = bestComboEver;
+})();
+resize();
+applyLang();
+syncToggles();
+updateHUD();
+showScreen("home");
+requestAnimationFrame(loop);
+setTimeout(resize, 60);
+</script>
+
+<script>
+/* ==================== Ads — AdMob-ready ====================
+   Paste the real AdMob IDs here when publishing (e.g. on Uptodown).
+   Real AdMob IDs pasted 2026-11-25 — do not ship with test/placeholder IDs.
+     appId            -> AdMob App ID (ca-app-pub-...~...)
+     bannerUnitId     -> home screen banner slot
+     interstitialUnitId -> ad break (after every 3rd level / every 2nd game)
+     rewardedUnitId   -> stored only; no Watch Ad placement in this game yet
+     appOpenUnitId    -> shown once, as soon as the app is opened */
+window.ADMOB_CONFIG = {
+  appId: "ca-app-pub-2948876721824340~3364568815",
+  bannerUnitId: "ca-app-pub-2948876721824340/2634388187",
+  interstitialUnitId: "ca-app-pub-2948876721824340/8022446230",
+  rewardedUnitId: "ca-app-pub-2948876721824340/8065717803",
+  appOpenUnitId: "ca-app-pub-2948876721824340/6369492759"
+};
+</script>
+</body>
+</html>
