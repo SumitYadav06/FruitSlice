@@ -308,9 +308,6 @@
         <div class="stat"><b id="bestCombo">0</b><span data-i18n="bestCombo">Best Combo</span></div>
       </div>
 
-      <img class="art-img" id="feastArt" alt="New fruits" />
-      <p class="sub" data-i18n="newFruits" style="margin:-4px 0 12px;">6 new fruits — dragon fruit, coconut, blueberry, peach, plum &amp; pear!</p>
-
       <div class="ad-slot"><b>AD</b><span data-i18n="adSpace">Advertisement space</span></div>
 
       <div class="toggles">
@@ -408,7 +405,7 @@ var I18N = {
     resume: "Resume", home: "Home",
     adSpace: "Advertisement space",
     gameOver: "Game Over", bombHit: "Boom! You sliced a bomb 💣",
-    missedAll: "You missed 3 fruits!",
+    missedAll: "You missed 5 fruits!",
     waveTxt: "WAVE", frenzy: "FRUIT FRENZY!",
     combo: "COMBO", nice: "Nice!", great: "Great!", superTxt: "SUPER!",
     adIn: "Your game continues in",
@@ -417,7 +414,6 @@ var I18N = {
     adNotFinished: "Ad not finished — try again",
     modeClassic: "Classic", modeZen: "Zen · 60s", modeHard: "Hard",
     timeUp: "Time's up!",
-    newFruits: "6 new fruits — dragon fruit, coconut, blueberry, peach, plum & pear!",
     bestZen: "Best Zen"
   },
   hi: {
@@ -433,7 +429,7 @@ var I18N = {
     resume: "जारी रखो", home: "होम",
     adSpace: "विज्ञापन की जगह",
     gameOver: "खेल खत्म", bombHit: "धमाका! तुमने बम काट दिया 💣",
-    missedAll: "तुमने 3 फल छोड़ दिए!",
+    missedAll: "तुमने 5 फल छोड़ दिए!",
     waveTxt: "वेव", frenzy: "फलों की बौछार!",
     combo: "कॉम्बो", nice: "बढ़िया!", great: "शानदार!", superTxt: "सुपर!",
     adIn: "आपका खेल जारी रहेगा",
@@ -442,7 +438,6 @@ var I18N = {
     adNotFinished: "विज्ञापन पूरा नहीं हुआ — फिर से कोशिश करो",
     modeClassic: "क्लासिक", modeZen: "ज़ेन · 60 सेकंड", modeHard: "कठिन",
     timeUp: "समय खत्म!",
-    newFruits: "6 नए फल — ड्रैगन फ्रूट, नारियल, ब्लूबेरी, आड़ू, आलूबुखारा और नाशपाती!",
     bestZen: "सबसे अच्छा ज़ेन"
   }
 };
@@ -549,6 +544,30 @@ function stopMusic(){
 }
 function startSynthMusic(){ if (musicTimer) return; musicTimer = setInterval(musicTick, 300); }
 function stopSynthMusic(){ if (musicTimer){ clearInterval(musicTimer); musicTimer = null; } }
+/* ---- Background-audio guard (2026-11-25): music must STOP when the app is
+   minimised / sent to Home. It used to keep playing until the app was
+   removed from recents — hiding only paused the game, never the music.
+   visibilitychange alone is not reliable inside a Capacitor WebView (the
+   WebView can keep its media session alive), so pagehide + the Capacitor
+   App state change are wired too. Resume happens only if music was
+   actually playing before the hide, and only while the Music toggle is on
+   — music the user never started is never started. ---- */
+var bgAudioPaused = false;
+function pauseAllAudio(){
+  var wasPlaying = false;
+  if (musicEl && !musicEl.paused) wasPlaying = true;
+  if (musicTimer) wasPlaying = true;
+  if (wasPlaying) bgAudioPaused = true;
+  stopMusic();
+  if (AC && AC.state === "running"){ try { AC.suspend(); } catch(e){} }
+  for (var k in sfxEls){ try { if (sfxEls[k] && !sfxEls[k].paused) sfxEls[k].pause(); } catch(e){} }
+}
+function resumeAllAudio(){
+  if (!bgAudioPaused) return; bgAudioPaused = false;
+  if (!musicOn) return;
+  if (AC && AC.state === "suspended"){ try { AC.resume(); } catch(e){} }
+  startMusic();
+}
 function playFileSfx(name){
   if (!soundOn || sfxFileBad[name]) return false;
   try {
@@ -574,11 +593,10 @@ var THEMES = { day:"assets/bg-day.jpg", sunset:"assets/bg-sunset.jpg", night:"as
 var MUSIC_BY_MODE = { classic:"assets/audio/music-sunny.mp3", zen:"assets/audio/music-sunset.mp3", hard:"assets/audio/music-night.mp3" };
 /* Lazy-load the heavy art after first paint so the first load stays fast. */
 function lazyLoadArt(){
-  var srcs = ["assets/splash.jpg","assets/win.jpg","assets/fruit-feast.jpg",
+  var srcs = ["assets/splash.jpg","assets/win.jpg",
     "assets/bg-day.jpg","assets/bg-sunset.jpg","assets/bg-night.jpg","assets/bg-zen.jpg","assets/bg-storm.jpg"];
   for (var i=0;i<srcs.length;i++){ var im = new Image(); im.src = srcs[i]; }
   var sp = document.getElementById("splashArt"); if (sp && !sp.getAttribute("src")) sp.src = "assets/splash.jpg";
-  var fe = document.getElementById("feastArt"); if (fe && !fe.getAttribute("src")) fe.src = "assets/fruit-feast.jpg";
 }
 function setTheme(name){
   var img = document.getElementById("bgArtImg");
@@ -639,7 +657,7 @@ var FRUITS = [
 /* ---------------- Game state ---------------- */
 var MODE = "home"; /* home | playing | paused | over | ad */
 var fruits = [], halves = [], particles = [], splashes = [], floaters = [];
-var score = 0, slicedCount = 0, lives = 3, wave = 1;
+var score = 0, slicedCount = 0, lives = 5, wave = 1;
 var bestScore = 0, bestComboEver = 0;
 var spawnTimer = 0, waveFruitLeft = 0, wavePause = 0, elapsed = 0;
 var comboCount = 0, comboTimer = 0, runBestCombo = 0;
@@ -659,7 +677,7 @@ function newFruit(x, vx, vy, def, isBomb){
   };
 }
 function launchWave(){
-  waveFruitLeft = 4 + Math.min(10, wave * 2);
+  waveFruitLeft = wave === 1 ? 4 : wave === 2 ? 5 : wave === 3 ? 7 : Math.min(14, 4 + wave * 2);
   spawnTimer = 0.2;
   setTheme(themeForWave());
   if (wave % 3 === 0 && wave > 1){
@@ -673,12 +691,13 @@ function spawnOne(){
   var margin = 60;
   var x = rand(margin, Math.max(margin+1, W - margin));
   var vx = rand(-40, 40) + (W/2 - x) * rand(0.1, 0.35);
-  var vy = -rand(H*1.18, H*1.38) - wave * 12;
+  var earlySpd = wave <= 3 ? 0.8 : (wave <= 5 ? 0.9 : 1); /* gentler early waves */
+  var vy = -rand(H*1.18, H*1.38) * earlySpd - wave * 8;
   if (gameMode === "hard") vy *= 1.15;
   var roll = Math.random();
   var bombChance = 0;
-  if (gameMode !== "zen") bombChance = wave < 2 ? 0 : Math.min(0.10 + wave * 0.012, 0.24);
-  if (gameMode === "hard") bombChance = Math.min(0.16 + wave * 0.02, 0.32);
+  if (gameMode === "hard") bombChance = Math.min(0.05 + wave * 0.015, 0.28);
+  else if (gameMode !== "zen") bombChance = wave < 3 ? 0 : Math.min(0.03 + wave * 0.01, 0.20);
   if (roll < bombChance){
     fruits.push(newFruit(x, vx, vy, null, true));
   } else if (roll > 0.975){
@@ -789,7 +808,7 @@ function startGame(){
   setMusicTrack(MUSIC_BY_MODE[gameMode] || MUSIC_BY_MODE.classic);
   if (musicOn) startMusic();
   fruits = []; halves = []; particles = []; floaters = []; splashes = [];
-  score = 0; slicedCount = 0; lives = (gameMode === "hard" ? 2 : 3); wave = 1; zenTimeLeft = 60;
+  score = 0; slicedCount = 0; lives = (gameMode === "hard" ? 3 : 5); wave = 1; zenTimeLeft = 60;
   comboCount = 0; comboTimer = 0; runBestCombo = 0;
   elapsed = 0; shake = 0; flashRed = 0;
   MODE = "playing";
@@ -865,14 +884,14 @@ function showAdBreakDemo(done){
   }, 1000);
 }
 /* Rewarded Continue (opt-in only): the player keeps the current
-   score and restarts the current wave with 3 fresh lives. The
+   score and restarts the current wave with 5 fresh lives (3 in Hard). The
    reward is granted ONLY when AdMob reports it earned; closing
    the ad early gives nothing, and no demo is shown in that case. */
 function continueAfterAd(){
   if (MODE !== "over" && MODE !== "ad") return;
   continuedThisRun = true;
   fruits = []; halves = []; particles = []; floaters = []; splashes = [];
-  lives = (gameMode === "hard" ? 2 : 3); comboCount = 0; comboTimer = 0; runBestCombo = 0;
+  lives = (gameMode === "hard" ? 3 : 5); comboCount = 0; comboTimer = 0; runBestCombo = 0;
   shake = 0; flashRed = 0; zenTimeLeft = 60;
   MODE = "playing";
   launchWave();
@@ -903,8 +922,14 @@ function pauseGame(){
 }
 /* Auto-pause when the player leaves the game mid-run — no unfair lost lives */
 document.addEventListener("visibilitychange", function(){
-  if (document.hidden) pauseGame();
+  if (document.hidden){ pauseGame(); pauseAllAudio(); }
+  else resumeAllAudio();
 });
+window.addEventListener("pagehide", function(){ pauseAllAudio(); });
+try{
+  var __capApp = window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.App;
+  if (__capApp && __capApp.addListener){ __capApp.addListener("appStateChange", function(s){ if (s && s.isActive === false) pauseAllAudio(); else if (s && s.isActive === true) resumeAllAudio(); }); }
+}catch(e){}
 window.addEventListener("blur", function(){ pauseGame(); });
 function resumeGame(){
   if (MODE !== "paused") return;
@@ -928,7 +953,7 @@ function updateHUD(){
   document.getElementById("hudScore").textContent = score;
   document.getElementById("hudWave").textContent = wave;
   var h = "";
-  for (var i=0;i<3;i++) h += '<span class="' + (i < lives ? "" : "lost") + '">🍓</span>';
+  for (var i=0;i<5;i++) h += '<span class="' + (i < lives ? "" : "lost") + '">🍓</span>';
   document.getElementById("hudLives").innerHTML = h;
   document.getElementById("btnSoundHud").textContent = soundOn ? "🔊" : "🔇";
 }
@@ -972,7 +997,7 @@ function update(dt){
       if (spawnTimer <= 0){
         spawnOne();
         if (Math.random() < 0.3 && waveFruitLeft > 0) spawnOne();
-        spawnTimer = rand(0.55, 1.05) - Math.min(0.3, wave * 0.02);
+        spawnTimer = wave <= 3 ? rand(0.85, 1.35) : rand(0.55, 1.05) - Math.min(0.3, wave * 0.02);
       }
     } else if (fruits.length === 0){
       wavePause -= dt;
@@ -1106,94 +1131,202 @@ function circleGrad(x, y, r, c1, c2){
   g.addColorStop(0, c1); g.addColorStop(1, c2);
   return g;
 }
+/* ---------------- Realistic fruit art ---------------- */
+/* Every fruit is drawn in its true shape with shaded skin, texture,
+   stem/leaf and a crisp gloss, so it reads as real juicy fruit. */
+function fruitPath(d, r){
+  ctx.beginPath();
+  if (d.name === "pear"){
+    ctx.moveTo(0, -r);
+    ctx.bezierCurveTo(r*0.55, -r*0.92, r*0.40, -r*0.22, r*0.70, r*0.18);
+    ctx.bezierCurveTo(r*0.92, r*0.52, r*0.72, r*0.95, 0, r*0.95);
+    ctx.bezierCurveTo(-r*0.72, r*0.95, -r*0.92, r*0.52, -r*0.70, r*0.18);
+    ctx.bezierCurveTo(-r*0.40, -r*0.22, -r*0.55, -r*0.92, 0, -r);
+  } else if (d.name === "strawberry"){
+    ctx.moveTo(0, r*0.95);
+    ctx.bezierCurveTo(-r*0.92, r*0.12, -r*0.98, -r*0.72, -r*0.46, -r*0.84);
+    ctx.bezierCurveTo(-r*0.22, -r*0.90, -r*0.08, -r*0.68, 0, -r*0.60);
+    ctx.bezierCurveTo(r*0.08, -r*0.68, r*0.22, -r*0.90, r*0.46, -r*0.84);
+    ctx.bezierCurveTo(r*0.98, -r*0.72, r*0.92, r*0.12, 0, r*0.95);
+  } else if (d.name === "lemon"){
+    ctx.moveTo(-r*1.04, 0);
+    ctx.quadraticCurveTo(-r*0.92, -r*0.74, 0, -r*0.76);
+    ctx.quadraticCurveTo(r*0.92, -r*0.74, r*1.04, 0);
+    ctx.quadraticCurveTo(r*0.92, r*0.74, 0, r*0.76);
+    ctx.quadraticCurveTo(-r*0.92, r*0.74, -r*1.04, 0);
+  } else if (d.name === "mango"){
+    ctx.ellipse(0, 0, r*0.86, r*1.0, 0.18, 0, Math.PI*2);
+  } else if (d.name === "kiwi"){
+    ctx.ellipse(0, 0, r*0.96, r*0.86, 0, 0, Math.PI*2);
+  } else if (d.name === "pineapple"){
+    ctx.ellipse(0, 0, r*0.88, r*1.04, 0, 0, Math.PI*2);
+  } else {
+    ctx.arc(0, 0, r, 0, Math.PI*2);
+  }
+}
+function dots(n, r, color, sz){
+  /* even golden-angle spread of small dots inside radius r */
+  ctx.fillStyle = color;
+  for (var i=0;i<n;i++){
+    var a = i * 2.39996, rr = r * 0.85 * Math.sqrt((i + 0.5) / n);
+    ctx.beginPath(); ctx.arc(Math.cos(a)*rr, Math.sin(a)*rr, sz, 0, Math.PI*2); ctx.fill();
+  }
+}
+function drawStemLeaf(r){
+  ctx.strokeStyle = "#5a3a1a"; ctx.lineWidth = Math.max(2.5, r*0.09); ctx.lineCap = "round";
+  ctx.beginPath(); ctx.moveTo(0, -r*0.9); ctx.quadraticCurveTo(2, -r*1.08, 6, -r*1.14); ctx.stroke();
+  ctx.fillStyle = "#3cb531";
+  ctx.beginPath(); ctx.ellipse(11, -r*1.0, r*0.26, r*0.14, 0.5, 0, Math.PI*2); ctx.fill();
+  ctx.fillStyle = "rgba(255,255,255,0.28)";
+  ctx.beginPath(); ctx.ellipse(11, -r*1.02, r*0.13, r*0.05, 0.5, 0, Math.PI*2); ctx.fill();
+}
 function drawFruitBody(f){
-  var d = f.def;
+  var d = f.def, r = f.r;
   ctx.save();
   ctx.translate(f.x, f.y);
   if (d.golden){
-    /* pulsing halo so the bonus fruit reads as special at a glance */
     var pulse = 0.5 + 0.5 * Math.sin(performance.now() / 180);
     ctx.globalAlpha = 0.35 + pulse * 0.4;
     ctx.fillStyle = "#ffe259";
-    ctx.beginPath(); ctx.arc(0, 0, f.r + 7 + pulse * 4, 0, Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.arc(0, 0, r + 7 + pulse * 4, 0, Math.PI*2); ctx.fill();
     ctx.globalAlpha = 1;
   }
   ctx.rotate(f.rot);
-  /* body */
-  ctx.fillStyle = circleGrad(0, 0, f.r, d.out, d.out2);
-  ctx.beginPath(); ctx.arc(0, 0, f.r, 0, Math.PI*2); ctx.fill();
-  if (d.name === "pineapple"){
-    ctx.strokeStyle = "rgba(120,70,0,0.4)"; ctx.lineWidth = 2;
-    for (var i=-2;i<=2;i++){
-      ctx.beginPath(); ctx.moveTo(i*f.r/2.4, -f.r); ctx.lineTo(i*f.r/2.4 + f.r*0.4, f.r); ctx.stroke();
-      ctx.beginPath(); ctx.moveTo(i*f.r/2.4, -f.r); ctx.lineTo(i*f.r/2.4 - f.r*0.4, f.r); ctx.stroke();
-    }
-    ctx.fillStyle = "#2fae4e";
-    for (var l=-1;l<=1;l++){
-      ctx.beginPath();
-      ctx.ellipse(l*8, -f.r - 8, 5, 13, l*0.4, 0, Math.PI*2);
-      ctx.fill();
-    }
-  }
-  if (d.name === "strawberry"){
-    ctx.fillStyle = "#2fae4e";
-    ctx.beginPath();
-    ctx.ellipse(0, -f.r + 3, f.r*0.5, 7, 0, 0, Math.PI*2);
-    ctx.fill();
-  }
-  if (d.name === "dragonfruit"){
-    ctx.fillStyle = "#3cb531";
-    for (var df=-2; df<=2; df++){
-      ctx.beginPath();
-      ctx.moveTo(df * f.r * 0.32, -f.r * 0.55);
-      ctx.lineTo(df * f.r * 0.32 + 7, -f.r * 0.95);
-      ctx.lineTo(df * f.r * 0.32 + 14, -f.r * 0.55);
-      ctx.closePath(); ctx.fill();
-    }
-  }
-  if (d.name === "coconut"){
-    ctx.fillStyle = "rgba(0,0,0,0.35)";
-    for (var ccI=-1; ccI<=1; ccI++){
-      ctx.beginPath(); ctx.arc(ccI * 9, -4, 3.2, 0, Math.PI*2); ctx.fill();
-    }
-  }
-  if (d.name === "blueberry"){
-    ctx.fillStyle = "#1e2a7a";
-    ctx.beginPath(); ctx.arc(0, -f.r + 6, 5, 0, Math.PI*2); ctx.fill();
-    ctx.fillStyle = "#8fa2ff";
-    ctx.beginPath(); ctx.arc(0, -f.r + 6, 2.4, 0, Math.PI*2); ctx.fill();
-  }
-  if (d.name === "peach"){
-    ctx.strokeStyle = "rgba(180,60,30,0.45)"; ctx.lineWidth = 2.5;
-    ctx.beginPath(); ctx.moveTo(0, -f.r + 4); ctx.quadraticCurveTo(4, 0, 0, f.r - 4); ctx.stroke();
-  }
-  if (d.name === "pear"){
-    ctx.fillStyle = circleGrad(0, -f.r * 0.3, f.r * 0.72, d.out, d.out2);
-    ctx.beginPath(); ctx.arc(0, -f.r * 0.28, f.r * 0.72, 0, Math.PI*2); ctx.fill();
-  }
-  if (d.name === "apple" || d.name === "orange" || d.name === "mango" || d.name === "golden" || d.name === "plum" || d.name === "pear" || d.name === "peach"){
-    ctx.strokeStyle = "#5a3a1a"; ctx.lineWidth = 3.5;
-    ctx.beginPath(); ctx.moveTo(0, -f.r + 2); ctx.quadraticCurveTo(2, -f.r - 8, 6, -f.r - 10); ctx.stroke();
-    ctx.fillStyle = "#3cb531";
-    ctx.beginPath(); ctx.ellipse(9, -f.r - 6, 8, 4.5, 0.5, 0, Math.PI*2); ctx.fill();
-  }
+  /* true shape + shaded skin */
+  fruitPath(d, r);
+  ctx.fillStyle = circleGrad(0, 0, r, d.out, d.out2);
+  ctx.fill();
+  ctx.strokeStyle = "rgba(0,0,0,0.22)"; ctx.lineWidth = 1.6; ctx.stroke();
+  /* skin texture, clipped to the body */
+  ctx.save(); fruitPath(d, r); ctx.clip();
+  var lg = ctx.createRadialGradient(-r*0.45, -r*0.5, r*0.1, -r*0.2, -r*0.25, r*1.15);
+  lg.addColorStop(0, "rgba(255,255,255,0.30)");
+  lg.addColorStop(0.55, "rgba(255,255,255,0)");
+  lg.addColorStop(1, "rgba(0,0,0,0.20)");
+  ctx.fillStyle = lg; ctx.fillRect(-r*1.2, -r*1.2, r*2.4, r*2.4);
   if (d.name === "watermelon"){
-    ctx.strokeStyle = "rgba(10,60,20,0.5)"; ctx.lineWidth = 5;
+    ctx.strokeStyle = "rgba(8,60,20,0.55)"; ctx.lineWidth = r*0.13; ctx.lineCap = "round";
     for (var wI=-2; wI<=2; wI++){
       ctx.beginPath();
-      ctx.moveTo(wI * f.r/2.6, -f.r + 4);
-      ctx.quadraticCurveTo(wI * f.r/2.6 + 6, 0, wI * f.r/2.6, f.r - 4);
+      ctx.moveTo(wI * r/2.6, -r*1.05);
+      ctx.quadraticCurveTo(wI * r/2.6 + 7, 0, wI * r/2.6, r*1.05);
       ctx.stroke();
     }
+  } else if (d.name === "orange"){
+    dots(26, r, "rgba(210,90,0,0.35)", 1.6);
+    dots(18, r, "rgba(255,255,255,0.25)", 1.2);
+  } else if (d.name === "apple"){
+    var bl = ctx.createRadialGradient(r*0.35, r*0.25, r*0.1, r*0.3, r*0.2, r*0.9);
+    bl.addColorStop(0, "rgba(170,10,25,0.4)"); bl.addColorStop(1, "rgba(170,10,25,0)");
+    ctx.fillStyle = bl; ctx.fillRect(-r, -r, r*2, r*2);
+    ctx.fillStyle = "rgba(90,20,10,0.5)";
+    ctx.beginPath(); ctx.ellipse(0, -r*0.92, r*0.16, r*0.06, 0, 0, Math.PI*2); ctx.fill();
+  } else if (d.name === "lemon"){
+    dots(22, r, "rgba(200,150,0,0.30)", 1.4);
+  } else if (d.name === "kiwi"){
+    dots(60, r, "rgba(255,235,200,0.16)", 1.1);
+    dots(30, r, "rgba(60,40,10,0.25)", 1.0);
+  } else if (d.name === "strawberry"){
+    dots(34, r, "#ffe9a8", 1.9);
+  } else if (d.name === "mango"){
+    var mb = ctx.createRadialGradient(r*0.35, r*0.1, r*0.1, r*0.3, r*0.15, r*0.95);
+    mb.addColorStop(0, "rgba(230,60,20,0.42)"); mb.addColorStop(1, "rgba(230,60,20,0)");
+    ctx.fillStyle = mb; ctx.fillRect(-r, -r, r*2, r*2);
+    dots(16, r, "rgba(255,255,255,0.20)", 1.2);
+  } else if (d.name === "pineapple"){
+    ctx.strokeStyle = "rgba(120,70,0,0.45)"; ctx.lineWidth = 2;
+    var pi;
+    for (pi=-3; pi<=3; pi++){
+      ctx.beginPath(); ctx.moveTo(pi*r/2.6 - r, -r); ctx.lineTo(pi*r/2.6 + r*0.4, r); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(pi*r/2.6 - r, r); ctx.lineTo(pi*r/2.6 + r*0.4, -r); ctx.stroke();
+    }
+  } else if (d.name === "coconut"){
+    ctx.strokeStyle = "rgba(0,0,0,0.22)"; ctx.lineWidth = 1.6;
+    var ci;
+    for (ci=0; ci<14; ci++){
+      var ca = ci * 2.39996, cr = r * 0.55 * Math.sqrt((ci + 0.5) / 14);
+      var cx = Math.cos(ca)*cr, cy = Math.sin(ca)*cr;
+      ctx.beginPath(); ctx.moveTo(cx - 4, cy); ctx.quadraticCurveTo(cx, cy + 3, cx + 4, cy); ctx.stroke();
+    }
+  } else if (d.name === "blueberry"){
+    var bb = ctx.createRadialGradient(-r*0.3, -r*0.35, r*0.1, 0, 0, r);
+    bb.addColorStop(0, "rgba(190,205,255,0.38)"); bb.addColorStop(1, "rgba(190,205,255,0)");
+    ctx.fillStyle = bb; ctx.fillRect(-r, -r, r*2, r*2);
+  } else if (d.name === "peach"){
+    var pb = ctx.createRadialGradient(-r*0.3, r*0.2, r*0.1, -r*0.2, r*0.15, r*0.95);
+    pb.addColorStop(0, "rgba(255,80,120,0.38)"); pb.addColorStop(1, "rgba(255,80,120,0)");
+    ctx.fillStyle = pb; ctx.fillRect(-r, -r, r*2, r*2);
+    ctx.strokeStyle = "rgba(180,60,30,0.45)"; ctx.lineWidth = 2.5;
+    ctx.beginPath(); ctx.moveTo(0, -r*0.9); ctx.quadraticCurveTo(4, 0, 0, r*0.9); ctx.stroke();
+  } else if (d.name === "plum"){
+    var pl = ctx.createRadialGradient(-r*0.3, -r*0.35, r*0.1, 0, 0, r);
+    pl.addColorStop(0, "rgba(220,200,255,0.32)"); pl.addColorStop(1, "rgba(220,200,255,0)");
+    ctx.fillStyle = pl; ctx.fillRect(-r, -r, r*2, r*2);
+    ctx.strokeStyle = "rgba(40,10,60,0.4)"; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(0, -r*0.9); ctx.quadraticCurveTo(3, 0, 0, r*0.9); ctx.stroke();
+  } else if (d.name === "pear"){
+    dots(30, r, "rgba(255,255,220,0.35)", 1.3);
+    var pr = ctx.createRadialGradient(r*0.35, r*0.2, r*0.1, r*0.3, r*0.2, r*0.9);
+    pr.addColorStop(0, "rgba(220,120,40,0.28)"); pr.addColorStop(1, "rgba(220,120,40,0)");
+    ctx.fillStyle = pr; ctx.fillRect(-r, -r, r*2, r*2);
   }
-  /* shine */
-  ctx.fillStyle = "rgba(255,255,255,0.35)";
+  ctx.restore();
+  /* stems, leaves, crowns, scales — drawn outside the body clip */
+  if (d.name === "pineapple"){
+    ctx.fillStyle = "#2fae4e";
+    for (var l=-2;l<=2;l++){
+      ctx.beginPath();
+      ctx.ellipse(l*r*0.16, -r*1.08, r*0.13, r*0.42, l*0.32, 0, Math.PI*2);
+      ctx.fill();
+    }
+    ctx.fillStyle = "#1e7d33";
+    ctx.beginPath(); ctx.ellipse(0, -r*1.08, r*0.13, r*0.42, 0, 0, Math.PI*2); ctx.fill();
+  } else if (d.name === "strawberry"){
+    ctx.fillStyle = "#2fae4e";
+    for (var sI=-2; sI<=2; sI++){
+      ctx.beginPath();
+      ctx.moveTo(sI*r*0.2 - 4, -r*0.66);
+      ctx.lineTo(sI*r*0.3, -r*1.02);
+      ctx.lineTo(sI*r*0.2 + 4, -r*0.66);
+      ctx.closePath(); ctx.fill();
+    }
+  } else if (d.name === "dragonfruit"){
+    for (var df=0; df<8; df++){
+      var da = df * Math.PI / 4;
+      ctx.save(); ctx.rotate(da);
+      ctx.fillStyle = "#3cb531";
+      ctx.beginPath(); ctx.ellipse(0, -r*0.78, r*0.15, r*0.34, 0, 0, Math.PI*2); ctx.fill();
+      ctx.fillStyle = "#ff4d8d";
+      ctx.beginPath(); ctx.ellipse(0, -r*0.55, r*0.10, r*0.16, 0, 0, Math.PI*2); ctx.fill();
+      ctx.restore();
+    }
+  } else if (d.name === "coconut"){
+    ctx.fillStyle = "rgba(20,10,5,0.55)";
+    var cc;
+    for (cc=-1; cc<=1; cc++){
+      ctx.beginPath(); ctx.arc(cc*9, -r*0.32, 3.2, 0, Math.PI*2); ctx.fill();
+    }
+  } else if (d.name === "blueberry"){
+    ctx.fillStyle = "#1e2a7a";
+    for (var bI=0; bI<5; bI++){
+      var ba = -Math.PI/2 + bI * Math.PI*2/5;
+      ctx.beginPath(); ctx.ellipse(Math.cos(ba)*4, -r*0.82 + Math.sin(ba)*4, 2.6, 2.6, 0, 0, Math.PI*2); ctx.fill();
+    }
+  } else if (d.name === "lemon"){
+    ctx.fillStyle = d.out2;
+    ctx.beginPath(); ctx.moveTo(-r*1.04, -4); ctx.lineTo(-r*1.16, 0); ctx.lineTo(-r*1.04, 4); ctx.closePath(); ctx.fill();
+    ctx.beginPath(); ctx.moveTo(r*1.04, -4); ctx.lineTo(r*1.16, 0); ctx.lineTo(r*1.04, 4); ctx.closePath(); ctx.fill();
+  } else if (d.name === "apple" || d.name === "orange" || d.name === "mango" || d.name === "plum" || d.name === "pear" || d.name === "peach" || d.name === "golden" || d.name === "kiwi"){
+    drawStemLeaf(r);
+  }
+  /* crisp gloss */
+  ctx.fillStyle = "rgba(255,255,255,0.5)";
   ctx.beginPath();
-  ctx.ellipse(-f.r*0.36, -f.r*0.42, f.r*0.2, f.r*0.12, -0.6, 0, Math.PI*2);
+  ctx.ellipse(-r*0.36, -r*0.44, r*0.17, r*0.10, -0.6, 0, Math.PI*2);
   ctx.fill();
   if (d.golden){
-    ctx.fillStyle = "rgba(255,255,255,0.85)";
-    ctx.font = "bold " + Math.round(f.r*0.5) + "px sans-serif";
+    ctx.fillStyle = "rgba(255,255,255,0.9)";
+    ctx.font = "bold " + Math.round(r*0.5) + "px sans-serif";
     ctx.textAlign = "center"; ctx.textBaseline = "middle";
     ctx.fillText("★", 0, 2);
   }
@@ -1225,29 +1358,123 @@ function drawBomb(f){
   ctx.restore();
 }
 function drawHalf(hf){
-  var d = hf.def;
+  var d = hf.def, r = hf.r;
   ctx.save();
   ctx.translate(hf.x, hf.y);
   ctx.rotate(hf.rot);
   /* clip to one side of the cut */
   ctx.beginPath();
-  ctx.rect(-hf.r - 3, hf.side < 0 ? -hf.r - 3 : 0, hf.r*2 + 6, hf.r + 3);
+  ctx.rect(-r - 3, hf.side < 0 ? -r - 3 : 0, r*2 + 6, r + 3);
   ctx.clip();
-  /* outer skin */
-  ctx.fillStyle = circleGrad(0, 0, hf.r, d.out, d.out2);
-  ctx.beginPath(); ctx.arc(0, 0, hf.r, 0, Math.PI*2); ctx.fill();
-  /* inner flesh */
-  ctx.fillStyle = d.in;
-  ctx.beginPath(); ctx.arc(0, 0, hf.r * 0.8, 0, Math.PI*2); ctx.fill();
-  ctx.strokeStyle = d.inEdge; ctx.lineWidth = 3.5;
-  ctx.beginPath(); ctx.arc(0, 0, hf.r * 0.88, 0, Math.PI*2); ctx.stroke();
-  /* seeds */
-  if (d.seed){
+  /* outer skin, true shape */
+  fruitPath(d, r);
+  ctx.fillStyle = circleGrad(0, 0, r, d.out, d.out2);
+  ctx.fill();
+  /* inner flesh, same true shape, slightly smaller */
+  ctx.save(); ctx.scale(0.8, 0.8);
+  fruitPath(d, r);
+  ctx.fillStyle = d.in; ctx.fill();
+  ctx.restore();
+  /* pale rind ring */
+  ctx.save(); ctx.scale(0.88, 0.88);
+  fruitPath(d, r);
+  ctx.strokeStyle = d.inEdge; ctx.lineWidth = 4; ctx.stroke();
+  ctx.restore();
+  /* realistic cut-face detail */
+  if (d.name === "orange" || d.name === "lemon"){
+    /* citrus segments with white pith lines */
+    ctx.strokeStyle = "rgba(255,255,255,0.8)"; ctx.lineWidth = 2;
+    for (var sg=0; sg<8; sg++){
+      var sa = sg * Math.PI/4;
+      ctx.beginPath(); ctx.moveTo(Math.cos(sa)*r*0.12, Math.sin(sa)*r*0.12);
+      ctx.lineTo(Math.cos(sa)*r*0.72, Math.sin(sa)*r*0.72); ctx.stroke();
+    }
+    ctx.fillStyle = "rgba(255,255,255,0.85)";
+    ctx.beginPath(); ctx.arc(0, 0, r*0.1, 0, Math.PI*2); ctx.fill();
+  } else if (d.name === "apple"){
+    /* five pips in a star around the core */
+    ctx.fillStyle = "#5a3a1a";
+    for (var ap=0; ap<5; ap++){
+      var aa = -Math.PI/2 + ap * Math.PI*2/5;
+      ctx.save(); ctx.translate(Math.cos(aa)*r*0.28, Math.sin(aa)*r*0.28); ctx.rotate(aa + Math.PI/2);
+      ctx.beginPath(); ctx.ellipse(0, 0, 2.4, 3.8, 0, 0, Math.PI*2); ctx.fill();
+      ctx.restore();
+    }
+  } else if (d.name === "kiwi"){
+    /* white core + ring of tiny black seeds */
+    ctx.fillStyle = "#f2ffd0";
+    ctx.beginPath(); ctx.ellipse(0, 0, r*0.3, r*0.22, 0, 0, Math.PI*2); ctx.fill();
+    ctx.fillStyle = "#2e4416";
+    for (var kw=0; kw<20; kw++){
+      var ka = kw * Math.PI*2/20;
+      ctx.beginPath(); ctx.arc(Math.cos(ka)*r*0.45, Math.sin(ka)*r*0.45, 1.6, 0, Math.PI*2); ctx.fill();
+    }
+  } else if (d.name === "dragonfruit"){
+    dots(46, r*0.75, "#222222", 1.4);
+  } else if (d.name === "coconut"){
+    /* thick white flesh ring, hollow middle */
+    ctx.fillStyle = "#5a3a22";
+    ctx.beginPath(); ctx.arc(0, 0, r*0.42, 0, Math.PI*2); ctx.fill();
+    ctx.fillStyle = "rgba(0,0,0,0.25)";
+    ctx.beginPath(); ctx.arc(0, 0, r*0.3, 0, Math.PI*2); ctx.fill();
+  } else if (d.name === "peach"){
+    /* brown pit with a red blush ring around it */
+    ctx.fillStyle = "#8a5a3a";
+    ctx.beginPath(); ctx.ellipse(0, 0, r*0.32, r*0.4, 0, 0, Math.PI*2); ctx.fill();
+    ctx.strokeStyle = "rgba(255,90,90,0.5)"; ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.arc(0, 0, r*0.55, 0, Math.PI*2); ctx.stroke();
+  } else if (d.name === "plum"){
+    ctx.fillStyle = "rgba(232,165,75,0.85)";
+    ctx.beginPath(); ctx.arc(0, 0, r*0.3, 0, Math.PI*2); ctx.fill();
+  } else if (d.name === "pineapple"){
+    /* fibrous rays + small core dots */
+    ctx.strokeStyle = "rgba(200,140,0,0.5)"; ctx.lineWidth = 1.6;
+    for (var pf=0; pf<10; pf++){
+      var pa = pf * Math.PI/5;
+      ctx.beginPath(); ctx.moveTo(Math.cos(pa)*r*0.15, Math.sin(pa)*r*0.15);
+      ctx.lineTo(Math.cos(pa)*r*0.72, Math.sin(pa)*r*0.72); ctx.stroke();
+    }
+    ctx.fillStyle = "#a86a00";
+    for (var pd=0; pd<6; pd++){
+      var pda = pd * Math.PI/3;
+      ctx.beginPath(); ctx.arc(Math.cos(pda)*r*0.32, Math.sin(pda)*r*0.32, 2, 0, Math.PI*2); ctx.fill();
+    }
+  } else if (d.name === "watermelon"){
+    /* black teardrop seeds in arcs */
+    ctx.fillStyle = "#402020";
+    var wm = [[-0.35,-0.25],[0.3,-0.3],[0,-0.5],[0.4,0.2],[-0.4,0.25],[0.05,0.05]];
+    for (var wi=0; wi<wm.length; wi++){
+      ctx.save(); ctx.translate(wm[wi][0]*r, wm[wi][1]*r); ctx.rotate(0.4);
+      ctx.beginPath(); ctx.ellipse(0, 0, 2.6, 4, 0, 0, Math.PI*2); ctx.fill();
+      ctx.restore();
+    }
+  } else if (d.name === "strawberry"){
+    ctx.fillStyle = "#fff3d6";
+    ctx.beginPath(); ctx.ellipse(0, 0, r*0.22, r*0.3, 0, 0, Math.PI*2); ctx.fill();
+    dots(20, r*0.7, "#ffe9a8", 1.5);
+  } else if (d.name === "blueberry"){
+    ctx.fillStyle = "rgba(255,255,255,0.7)";
+    ctx.beginPath(); ctx.arc(0, 0, r*0.12, 0, Math.PI*2); ctx.fill();
+    for (var bl2=0; bl2<5; bl2++){
+      var ba2 = bl2 * Math.PI*2/5;
+      ctx.beginPath(); ctx.arc(Math.cos(ba2)*r*0.3, Math.sin(ba2)*r*0.3, 2, 0, Math.PI*2); ctx.fill();
+    }
+  } else if (d.name === "pear"){
+    ctx.fillStyle = "#5a3a1a";
+    for (var pe=0; pe<3; pe++){
+      ctx.beginPath(); ctx.ellipse(-r*0.12 + pe*r*0.12, r*0.05, 2.2, 3.4, 0.3, 0, 0, Math.PI*2); ctx.fill();
+    }
+  } else if (d.name === "golden"){
+    ctx.fillStyle = "rgba(255,255,255,0.9)";
+    ctx.font = "bold " + Math.round(r*0.4) + "px sans-serif";
+    ctx.textAlign = "center"; ctx.textBaseline = "middle";
+    ctx.fillText("★", 0, 0);
+  } else if (d.seed){
     ctx.fillStyle = d.seed;
     var seeds = [[-0.3,-0.2],[0.25,-0.3],[0,-0.45],[0.35,0.25],[-0.35,0.3],[0.05,0.1]];
     for (var i=0;i<seeds.length;i++){
       ctx.beginPath();
-      ctx.ellipse(seeds[i][0]*hf.r, seeds[i][1]*hf.r, 2.4, 3.6, 0.4, 0, Math.PI*2);
+      ctx.ellipse(seeds[i][0]*r, seeds[i][1]*r, 2.4, 3.6, 0.4, 0, Math.PI*2);
       ctx.fill();
     }
   }
@@ -1257,7 +1484,7 @@ function drawHalf(hf){
   ctx.translate(hf.x, hf.y);
   ctx.rotate(hf.ang);
   ctx.fillStyle = "rgba(255,255,255,0.20)";
-  ctx.fillRect(-hf.r*0.85, hf.side < 0 ? -2.5 : -0.5, hf.r*1.7, 2.4);
+  ctx.fillRect(-r*0.85, hf.side < 0 ? -2.5 : -0.5, r*1.7, 2.4);
   ctx.restore();
 }
 function drawBlade(){
