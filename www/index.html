@@ -996,8 +996,8 @@ function update(dt){
       spawnTimer -= dt;
       if (spawnTimer <= 0){
         spawnOne();
-        if (Math.random() < 0.3 && waveFruitLeft > 0) spawnOne();
-        spawnTimer = wave <= 3 ? rand(0.85, 1.35) : rand(0.55, 1.05) - Math.min(0.3, wave * 0.02);
+        if (wave > 3 && Math.random() < 0.3 && waveFruitLeft > 0) spawnOne();
+        spawnTimer = wave <= 3 ? rand(1.15, 1.7) : rand(0.55, 1.05) - Math.min(0.3, wave * 0.02);
       }
     } else if (fruits.length === 0){
       wavePause -= dt;
@@ -1038,6 +1038,11 @@ function update(dt){
           addFloater(f.x, H - 60, "★", "#ffd76a", 26);
         } else if (gameMode === "zen"){
           /* Zen mode: a missed fruit costs no life — just slice and relax */
+          addFloater(f.x, H - 60, "✕", "#ff6b57", 30);
+        } else if (wave <= 3 && gameMode !== "hard"){
+          /* Warm-up waves 1-3 (Classic): a missed fruit costs no life,
+             so a new player can enjoy the game instead of losing in
+             10-20 seconds. From wave 4 a miss costs a life again. */
           addFloater(f.x, H - 60, "✕", "#ff6b57", 30);
         } else {
           lives--;
