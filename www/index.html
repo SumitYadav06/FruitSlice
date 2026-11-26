@@ -235,6 +235,26 @@
   .mode-btn{flex:1;background:var(--panel);border:1px solid rgba(255,255,255,.14);color:var(--ink);border-radius:999px;padding:10px 6px;font-weight:800;font-size:14px;cursor:pointer;font-family:inherit;min-height:44px;}
   .mode-btn.selected{background:linear-gradient(180deg,#ffd76a,#ff9a1f);color:#231303;border-color:#ff9a1f;}
 
+  /* ---------- Economy: coins, knife shop, daily reward ---------- */
+  .btn:disabled{opacity:.45;cursor:default;}
+  .btn-sm{font-size:13px;padding:8px 14px;min-height:38px;white-space:nowrap;}
+  .btn-gold{
+    background:linear-gradient(180deg,#ffd76a,#ff9a1f);
+    box-shadow:0 4px 0 #b25f00,0 8px 16px rgba(0,0,0,.35);
+    color:#231303;
+  }
+  .btn-gold:active{box-shadow:0 1px 0 #b25f00;}
+  .shop-head{display:flex;justify-content:space-between;align-items:center;font-weight:900;font-size:18px;margin-bottom:10px;gap:8px;}
+  .coin-chip{background:rgba(255,176,46,.14);border:1px solid rgba(255,176,46,.45);border-radius:999px;padding:5px 12px;font-weight:800;color:#ffd76a;font-size:15px;white-space:nowrap;}
+  .knife-row{display:flex;align-items:center;gap:10px;background:var(--panel2);border-radius:12px;padding:10px;margin-bottom:8px;}
+  .knife-row:last-child{margin-bottom:0;}
+  .knife-ico{font-size:26px;line-height:1;}
+  .knife-info{flex:1;min-width:0;}
+  .knife-name{font-weight:900;font-size:15px;}
+  .knife-sub{font-size:12px;color:var(--muted);font-weight:700;margin-top:1px;}
+  .knife-trail{height:6px;border-radius:99px;margin-top:6px;}
+  .knife-actions{display:flex;flex-direction:column;gap:6px;align-items:stretch;}
+
   /* ---------- Small phones: keep the whole HUD on one line ---------- */
   @media (max-width:480px){
     #hud{gap:5px;padding-left:8px;padding-right:8px;}
@@ -306,6 +326,23 @@
       <div class="stat-row">
         <div class="stat"><b id="bestScore">0</b><span data-i18n="best">Best Score</span></div>
         <div class="stat"><b id="bestCombo">0</b><span data-i18n="bestCombo">Best Combo</span></div>
+        <div class="stat"><b id="coinBalance">0</b><span data-i18n="coins">Coins</span></div>
+      </div>
+
+      <!-- DAILY REWARD (shown only when today's reward is unclaimed) -->
+      <div class="card hidden" id="dailyCard" style="margin-bottom:14px;">
+        <div class="shop-head"><span>🎁 <span data-i18n="dailyTitle">Daily Reward</span></span></div>
+        <p class="sub" id="dailyInfo" style="margin:0 0 10px;"></p>
+        <div class="row-btns">
+          <button class="btn btn-green" id="btnDailyClaim" style="font-size:16px;padding:11px 24px;">Claim</button>
+          <button class="btn btn-ghost" id="btnDailyDouble">🎥 <span data-i18n="doubleAd">Double with Ad</span></button>
+        </div>
+      </div>
+
+      <!-- KNIFE SHOP -->
+      <div class="card" id="shopCard" style="margin-bottom:14px;">
+        <div class="shop-head"><span>🔪 <span data-i18n="shopTitle">Knife Shop</span></span><span class="coin-chip">🪙 <b id="shopCoins">0</b></span></div>
+        <div id="knifeList"></div>
       </div>
 
       <div class="ad-slot"><b>AD</b><span data-i18n="adSpace">Advertisement space</span></div>
@@ -385,10 +422,55 @@ function saveSave(){
       bestZen: bestZen,
       lang: lang,
       soundOn: soundOn,
-      musicOn: musicOn
+      musicOn: musicOn,
+      /* Economy (added 2026-11-26): old saves simply lack these
+         fields and load with the defaults in the init block. */
+      coins: coins,
+      knife: knife,
+      unlocked: unlocked,
+      knifeAds: knifeAds,
+      daily: daily
     }));
   } catch (e) { /* storage unavailable (private mode etc.) — game still works */ }
 }
+
+/* ---------------- Economy: coins, knife skins, daily reward ----------------
+   * Coins: +1 per sliced fruit, +comboCount on a finished combo (3+),
+     golden fruit +10. Prices are deliberately high so unlocking by
+     pure play takes months of regular play.
+   * Knife skins: each has its own blade-trail colours + slice
+     particles (see drawBlade / sliceFruit). Ad unlock: 1 counted ad
+     per knife per day (knifeAds[id] = {count, lastDay}). */
+var KNIVES = [
+  { id:"default", nameKey:"knifeDefault", emoji:"🔪", coinPrice:0, adPrice:0,
+    trail:{ glow:"rgba(160,230,255,0.30)", mid:"rgba(160,230,255,0.50)", core:"rgba(255,255,255,0.95)", width:11, particle:"#aee6ff" } },
+  { id:"golden", nameKey:"knifeGolden", emoji:"🗡️", coinPrice:3000, adPrice:3,
+    trail:{ glow:"rgba(255,210,60,0.30)", mid:"rgba(255,190,40,0.55)", core:"rgba(255,244,170,0.98)", width:12, particle:"#ffd23e" } },
+  { id:"neon", nameKey:"knifeNeon", emoji:"⚡", coinPrice:6000, adPrice:5,
+    trail:{ glow:"rgba(0,255,190,0.30)", mid:"rgba(0,230,170,0.55)", core:"rgba(200,255,240,0.98)", width:12, particle:"#00ffb8" } },
+  { id:"ice", nameKey:"knifeIce", emoji:"❄️", coinPrice:10000, adPrice:7,
+    trail:{ glow:"rgba(120,200,255,0.30)", mid:"rgba(140,210,255,0.55)", core:"rgba(235,248,255,0.98)", width:12, particle:"#8fd4ff" } },
+  { id:"fire", nameKey:"knifeFire", emoji:"🔥", coinPrice:15000, adPrice:8,
+    trail:{ glow:"rgba(255,90,40,0.32)", mid:"rgba(255,120,30,0.58)", core:"rgba(255,225,130,0.98)", width:13, particle:"#ff7a2e" } }
+];
+var coins = 0;
+var knife = "default";            /* equipped skin id */
+var unlocked = {};                /* id -> true (default is always owned) */
+var knifeAds = {};                /* id -> {count, lastDay:"YYYY-MM-DD"} */
+var daily = { lastClaim:"", streak:0 };
+var coinsDirty = false, lastCoinSaveAt = 0;
+function dateStr(d){
+  var m = d.getMonth() + 1, day = d.getDate();
+  return d.getFullYear() + "-" + (m < 10 ? "0" : "") + m + "-" + (day < 10 ? "0" : "") + day;
+}
+function todayStr(){ return dateStr(new Date()); }
+function yesterdayStr(){ var d = new Date(); d.setDate(d.getDate() - 1); return dateStr(d); }
+function knifeById(id){
+  for (var i=0;i<KNIVES.length;i++) if (KNIVES[i].id === id) return KNIVES[i];
+  return null;
+}
+function isOwned(id){ return id === "default" || !!unlocked[id]; }
+function currentKnife(){ return knifeById(knife) || KNIVES[0]; }
 
 /* ---------------- i18n ---------------- */
 var I18N = {
@@ -414,7 +496,16 @@ var I18N = {
     adNotFinished: "Ad not finished — try again",
     modeClassic: "Classic", modeZen: "Zen · 60s", modeHard: "Hard",
     timeUp: "Time's up!",
-    bestZen: "Best Zen"
+    bestZen: "Best Zen",
+    coins: "Coins", shopTitle: "Knife Shop", dailyTitle: "Daily Reward",
+    claim: "Claim", doubleAd: "Double with Ad",
+    equip: "Equip", equipped: "Equipped", owned: "Owned", freeKnife: "Free",
+    ads: "ads", watchAdShort: "Ad", todayDone: "Done today",
+    adWatched: "Ad watched", adDoneToday: "Ad done for today — back tomorrow",
+    knifeUnlocked: "Knife unlocked! 🔪", notEnoughCoins: "Not enough coins",
+    dailyClaimed: "Daily reward claimed!", streakTxt: "🔥 {n} day streak",
+    knifeDefault: "Default", knifeGolden: "Golden", knifeNeon: "Neon",
+    knifeIce: "Ice", knifeFire: "Fire"
   },
   hi: {
     tagline: "उंगली घुमाकर फल काटो। बम से बचो!",
@@ -438,7 +529,16 @@ var I18N = {
     adNotFinished: "विज्ञापन पूरा नहीं हुआ — फिर से कोशिश करो",
     modeClassic: "क्लासिक", modeZen: "ज़ेन · 60 सेकंड", modeHard: "कठिन",
     timeUp: "समय खत्म!",
-    bestZen: "सबसे अच्छा ज़ेन"
+    bestZen: "सबसे अच्छा ज़ेन",
+    coins: "सिक्के", shopTitle: "चाकू की दुकान", dailyTitle: "रोज़ का इनाम",
+    claim: "लो", doubleAd: "विज्ञापन से दोगुना",
+    equip: "लगाओ", equipped: "लगा हुआ", owned: "खरीदा हुआ", freeKnife: "मुफ्त",
+    ads: "विज्ञापन", watchAdShort: "विज्ञापन", todayDone: "आज हो गया",
+    adWatched: "विज्ञापन देखा", adDoneToday: "आज का विज्ञापन हो गया — कल आना",
+    knifeUnlocked: "चाकू अनलॉक हो गया! 🔪", notEnoughCoins: "सिक्के कम हैं",
+    dailyClaimed: "रोज़ का इनाम मिल गया!", streakTxt: "🔥 लगातार {n} दिन",
+    knifeDefault: "साधारण", knifeGolden: "सुनहरा", knifeNeon: "नीऑन",
+    knifeIce: "बर्फ़ीला", knifeFire: "आग"
   }
 };
 var lang = "en";
@@ -759,7 +859,20 @@ function sliceFruit(f, ang){
   if (comboCount > runBestCombo) runBestCombo = comboCount;
   var pts = f.def.pts;
   score += pts; slicedCount++;
+  /* Economy: +1 coin per fruit, golden fruit +10 coins. */
+  var coinGain = (f.def && f.def.golden) ? 10 : 1;
+  coins += coinGain; coinsDirty = true;
   addFloater(f.x, f.y - f.r - 6, "+" + pts, "#ffd76a", 20);
+  if (f.def && f.def.golden) addFloater(f.x, f.y - f.r - 34, "+10 🪙", "#ffd76a", 22);
+  /* Equipped knife skin leaves its own coloured sparks on a slice. */
+  if (knife !== "default"){
+    var pc = currentKnife().trail.particle;
+    for (var pi=0; pi<6 && particles.length < 320; pi++){
+      var pa = rand(0, Math.PI*2), ps = rand(30, 160);
+      particles.push({ x:f.x, y:f.y, vx:Math.cos(pa)*ps, vy:Math.sin(pa)*ps - 40,
+        r:rand(2,4), color:pc, life:1, decay:rand(1.2,2) });
+    }
+  }
   sfxSlice();
   updateHUD();
 }
@@ -919,6 +1032,7 @@ function pauseGame(){
   MODE = "paused";
   pointerDown = false; blade = [];
   showScreen("pause");
+  saveSave(); /* coins earned this run survive the app being sent Home */
 }
 /* Auto-pause when the player leaves the game mid-run — no unfair lost lives */
 document.addEventListener("visibilitychange", function(){
@@ -946,6 +1060,8 @@ function goHome(){
   setMusicTrack(MUSIC_BY_MODE.classic);
   if (musicOn) startMusic();
   syncModeUI();
+  refreshEconomyUI();
+  saveSave();
   /* Back on Home — the real banner belongs here, not during play. */
   if(window.AdMobNative) window.AdMobNative.showHomeBanner();
 }
@@ -962,6 +1078,11 @@ function updateHUD(){
 var GRAV = 1500;
 function update(dt){
   elapsed += dt;
+  /* Coins earned mid-run are saved at most once every 8s, so a
+     crash or a force-close does not wipe a whole run's coins. */
+  if (coinsDirty && performance.now() - lastCoinSaveAt > 8000){
+    saveSave(); coinsDirty = false; lastCoinSaveAt = performance.now();
+  }
   if (MODE === "playing" && gameMode === "zen"){
     zenTimeLeft -= dt;
     var tLeft = Math.max(0, Math.ceil(zenTimeLeft));
@@ -979,7 +1100,11 @@ function update(dt){
       if (comboCount >= 3){
         var bonus = comboCount * 5;
         score += bonus;
+        /* Economy: finished combo also pays +1 coin per fruit in it. */
+        var coinBonus = comboCount;
+        coins += coinBonus; coinsDirty = true;
         addFloater(W/2, H*0.3, t("combo") + " x" + comboCount + "  +" + bonus, "#8bf36a", 30);
+        addFloater(W/2, H*0.3 + 34, "+" + coinBonus + " 🪙", "#ffd76a", 22);
         sfxCombo(comboCount);
         if (comboCount >= 5) showToast(t("superTxt") + " 🔥");
         else if (comboCount >= 4) showToast(t("great"));
@@ -1494,19 +1619,24 @@ function drawHalf(hf){
 }
 function drawBlade(){
   if (blade.length < 2) return;
+  /* The equipped knife skin colours the whole trail: a wide soft
+     glow, a brighter mid pass and the bright core. */
+  var tr = currentKnife().trail;
+  var passes = [
+    { color: tr.glow, width: tr.width + 8 },
+    { color: tr.mid,  width: tr.width },
+    { color: tr.core, width: 4 }
+  ];
   ctx.save();
   ctx.lineCap = "round"; ctx.lineJoin = "round";
-  for (var pass=0; pass<2; pass++){
+  for (var pass=0; pass<passes.length; pass++){
     ctx.beginPath();
     for (var i=0;i<blade.length;i++){
       var p = blade[i];
       if (i===0) ctx.moveTo(p.x, p.y); else ctx.lineTo(p.x, p.y);
     }
-    if (pass === 0){
-      ctx.strokeStyle = "rgba(160,230,255,0.35)"; ctx.lineWidth = 11;
-    } else {
-      ctx.strokeStyle = "rgba(255,255,255,0.95)"; ctx.lineWidth = 4;
-    }
+    ctx.strokeStyle = passes[pass].color;
+    ctx.lineWidth = passes[pass].width;
     ctx.stroke();
   }
   ctx.restore();
@@ -1651,6 +1781,7 @@ bind("btnSoundHud", function(){
 bind("btnLang", function(){
   lang = (lang === "en") ? "hi" : "en";
   applyLang(); sfxClick();
+  refreshEconomyUI(); /* shop + daily rows are built by JS, rebuild them */
   saveSave();
 });
 bind("btnSound", function(){
@@ -1693,6 +1824,157 @@ document.addEventListener("pointerdown", function once(){
   document.removeEventListener("pointerdown", once);
 });
 
+/* ---------------- Economy UI: shop, daily reward, ad unlocks ----------------
+   All rewarded ads here are opt-in only and reuse the same real
+   AdMob rewarded flow as Continue (reward ONLY when AdMob reports
+   it earned; demo overlay fallback on no fill; nothing on early
+   close). Existing placements are untouched. */
+function dailyRewardForToday(){
+  var streak = (daily.lastClaim === yesterdayStr()) ? (daily.streak || 0) + 1 : 1;
+  return { streak: streak, reward: Math.min(100 + 25 * (streak - 1), 250) };
+}
+function renderShop(){
+  var list = document.getElementById("knifeList");
+  if (!list) return;
+  var html = "";
+  for (var i=0;i<KNIVES.length;i++){
+    var k = KNIVES[i];
+    var owned = isOwned(k.id);
+    var equipped = (knife === k.id);
+    var rec = knifeAds[k.id] || { count:0, lastDay:"" };
+    var doneToday = rec.lastDay === todayStr();
+    var sub;
+    if (k.id === "default") sub = t("freeKnife");
+    else if (owned) sub = t("owned");
+    else sub = "🪙 " + k.coinPrice.toLocaleString("en-IN") + "  ·  🎥 " + k.adPrice + " " + t("ads");
+    var btns = "";
+    if (equipped){
+      btns = '<button class="btn btn-green btn-sm" disabled>' + t("equipped") + '</button>';
+    } else if (owned){
+      btns = '<button class="btn btn-green btn-sm" data-act="equip" data-id="' + k.id + '">' + t("equip") + '</button>';
+    } else {
+      var canCoins = coins >= k.coinPrice;
+      btns = '<button class="btn btn-gold btn-sm" data-act="coins" data-id="' + k.id + '"' + (canCoins ? "" : " disabled") + '>🪙 ' + k.coinPrice.toLocaleString("en-IN") + '</button>';
+      var adLabel = "🎥 " + t("watchAdShort") + " " + (rec.count || 0) + "/" + k.adPrice;
+      btns += '<button class="btn btn-ghost btn-sm" data-act="ad" data-id="' + k.id + '"' + (doneToday ? " disabled" : "") + '>' + (doneToday ? "✓ " + t("todayDone") : adLabel) + '</button>';
+    }
+    html += '<div class="knife-row">'
+      + '<div class="knife-ico">' + k.emoji + '</div>'
+      + '<div class="knife-info"><div class="knife-name">' + t(k.nameKey) + '</div>'
+      + '<div class="knife-sub">' + sub + '</div>'
+      + '<div class="knife-trail" style="background:linear-gradient(90deg,' + k.trail.glow + ',' + k.trail.core + ')"></div></div>'
+      + '<div class="knife-actions">' + btns + '</div></div>';
+  }
+  list.innerHTML = html;
+}
+function refreshDailyUI(){
+  var card = document.getElementById("dailyCard");
+  if (!card) return;
+  var available = daily.lastClaim !== todayStr();
+  card.classList.toggle("hidden", !available);
+  if (!available) return;
+  var r = dailyRewardForToday();
+  document.getElementById("dailyInfo").textContent = "+" + r.reward + " 🪙 · " + t("streakTxt").replace("{n}", String(r.streak));
+  document.getElementById("btnDailyClaim").textContent = t("claim") + " +" + r.reward + " 🪙";
+}
+function refreshEconomyUI(){
+  var cb = document.getElementById("coinBalance");
+  if (cb) cb.textContent = coins.toLocaleString("en-IN");
+  var sc = document.getElementById("shopCoins");
+  if (sc) sc.textContent = coins.toLocaleString("en-IN");
+  renderShop();
+  refreshDailyUI();
+}
+function unlockWithCoins(id){
+  var k = knifeById(id);
+  if (!k || id === "default" || unlocked[id]) return;
+  if (coins < k.coinPrice){ showToast(t("notEnoughCoins")); return; }
+  coins -= k.coinPrice;
+  unlocked[id] = true;
+  knife = id;
+  saveSave();
+  refreshEconomyUI();
+  showToast(t("knifeUnlocked"));
+  sfxWin();
+}
+function equipKnife(id){
+  if (!knifeById(id) || !isOwned(id)) return;
+  knife = id;
+  saveSave();
+  refreshEconomyUI();
+}
+/* Shared opt-in rewarded helper (Home only): real AdMob rewarded
+   first; on no fill the 3s demo overlay, then the reward; on early
+   close nothing is granted. After a demo the Home screen is
+   restored. */
+function watchRewardedOrDemo(onEarned){
+  if (window.AdMobNative && window.AdMobNative.isReady()){
+    window.AdMobNative.showRewarded(
+      function(){ onEarned(); },
+      function(){ showAdBreakDemo(function(){ MODE = "home"; showScreen("home"); onEarned(); }); },
+      function(){ showToast(t("adNotFinished")); }
+    );
+  } else {
+    showAdBreakDemo(function(){ MODE = "home"; showScreen("home"); onEarned(); });
+  }
+}
+function watchKnifeAd(id){
+  var k = knifeById(id);
+  if (MODE !== "home" || !k || k.id === "default" || unlocked[id]) return;
+  var rec = knifeAds[id] || { count:0, lastDay:"" };
+  if (rec.lastDay === todayStr()){ showToast(t("adDoneToday")); return; }
+  watchRewardedOrDemo(function(){ grantKnifeAd(id); });
+}
+function grantKnifeAd(id){
+  var k = knifeById(id);
+  if (!k) return;
+  var rec = knifeAds[id] || { count:0, lastDay:"" };
+  if (rec.lastDay === todayStr()) return; /* at most 1 counted ad per knife per day */
+  rec.count = (rec.count || 0) + 1;
+  rec.lastDay = todayStr();
+  knifeAds[id] = rec;
+  if (rec.count >= k.adPrice){
+    unlocked[id] = true;
+    knife = id;
+    showToast(t("knifeUnlocked"));
+    sfxWin();
+  } else {
+    showToast(t("adWatched") + " " + rec.count + "/" + k.adPrice);
+  }
+  saveSave();
+  refreshEconomyUI();
+}
+function claimDaily(doubleIt){
+  if (daily.lastClaim === todayStr()) return;
+  var r = dailyRewardForToday();
+  var reward = doubleIt ? r.reward * 2 : r.reward;
+  coins += reward;
+  daily.lastClaim = todayStr();
+  daily.streak = r.streak;
+  saveSave();
+  refreshEconomyUI();
+  showToast("+" + reward + " 🪙 · " + t("dailyClaimed"));
+  sfxWin();
+}
+function watchDailyDoubleAd(){
+  if (MODE !== "home" || daily.lastClaim === todayStr()) return;
+  watchRewardedOrDemo(function(){ claimDaily(true); });
+}
+/* Shop buttons are rebuilt by renderShop(), so clicks are handled
+   by delegation on the list container. */
+document.getElementById("knifeList").addEventListener("click", function(e){
+  var b = e.target.closest ? e.target.closest("[data-act]") : null;
+  if (!b || b.disabled) return;
+  audio();
+  var id = b.getAttribute("data-id"), act = b.getAttribute("data-act");
+  if (act === "coins") unlockWithCoins(id);
+  else if (act === "ad") watchKnifeAd(id);
+  else if (act === "equip") equipKnife(id);
+  sfxClick();
+});
+bind("btnDailyClaim", function(){ claimDaily(false); });
+bind("btnDailyDouble", function(){ watchDailyDoubleAd(); });
+
 /* ---------------- Init ---------------- */
 /* Load saved best score, best combo and settings (if any) */
 (function(){
@@ -1704,9 +1986,20 @@ document.addEventListener("pointerdown", function once(){
     if (d.lang === "en" || d.lang === "hi") lang = d.lang;
     if (typeof d.soundOn === "boolean") soundOn = d.soundOn;
     if (typeof d.musicOn === "boolean") musicOn = d.musicOn;
+    /* Economy fields (added 2026-11-26): old saves lack them and
+       simply keep the defaults declared above. */
+    if (typeof d.coins === "number" && d.coins >= 0) coins = Math.floor(d.coins);
+    if (typeof d.knife === "string" && knifeById(d.knife)) knife = d.knife;
+    if (d.unlocked && typeof d.unlocked === "object") unlocked = d.unlocked;
+    if (d.knifeAds && typeof d.knifeAds === "object") knifeAds = d.knifeAds;
+    if (d.daily && typeof d.daily === "object"){
+      if (typeof d.daily.lastClaim === "string") daily.lastClaim = d.daily.lastClaim;
+      if (typeof d.daily.streak === "number" && d.daily.streak >= 0) daily.streak = Math.floor(d.daily.streak);
+    }
   }
   document.getElementById("bestScore").textContent = bestScore;
   document.getElementById("bestCombo").textContent = bestComboEver;
+  refreshEconomyUI();
 })();
 resize();
 applyLang();
