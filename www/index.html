@@ -374,6 +374,15 @@ body.net-gated *{animation-play-state:paused !important}
       <button class="btn btn-green hidden" id="btnContinue" style="width:100%;max-width:430px;margin-bottom:12px;">▶ <span data-i18n="continueAd">Continue — Watch Ad</span></button>
       <button class="btn btn-ghost" id="btnHome2">🏠 <span data-i18n="home">Home</span></button>
     </div>
+    <!-- UPDATE AVAILABLE -->
+    <div class="screen hidden" id="updateScreen" style="background:linear-gradient(180deg,#0d2818,#071a10);z-index:30;justify-content:center;">
+      <div style="font-size:52px;line-height:1;">⬆️</div>
+      <h2 class="screen-head">Naya version aa gaya hai — Update karo</h2>
+      <p class="sub">A new version is available — Update now</p>
+      <button class="btn btn-play" id="btnUpdateNow" style="width:100%;max-width:430px;margin-bottom:12px;">⬇️ Update karo</button>
+      <button class="btn btn-ghost" id="btnUpdateLater" style="width:100%;max-width:430px;">Baad me / Later</button>
+    </div>
+
 
   </div>
 </div>
@@ -387,6 +396,58 @@ body.net-gated *{animation-play-state:paused !important}
    are saved in localStorage under a versioned key and loaded
    again on start, so they survive closing the page.
    ============================================================ */
+
+
+/* ================= App version check ("Old version — Update karo") =================
+   Old APKs cannot be changed retroactively, so the check lives in NEW builds: CI stamps
+   APP_VERSION to the build's run number (= versionCode) and the app compares it with
+   www/version.json ("latest") fetched from the public repo on launch.
+   * Unstamped build (website preview): APP_VERSION is a string, never a number — no prompt.
+   * Fetch fails / bad JSON / bad shape: silently ignored, the game works fully offline.
+   * APP_VERSION < latest: one designed full-screen modal per launch, with Update (opens the
+     release APK link) and "Baad me / Later" (dismisses for this session only). */
+var APP_VERSION = "__APP_VERSION__";
+var VERSION_URL = "https://raw.githubusercontent.com/SumitYadav06/FruitSlice/main/www/version.json";
+var updateShown = false;
+function validVersionInfo(d){
+  if(!d || typeof d !== "object") return false;
+  if(typeof d.latest !== "number" || !isFinite(d.latest)) return false;
+  if(typeof d.apkUrl !== "string" || d.apkUrl.indexOf("https://github.com/SumitYadav06/") !== 0) return false;
+  return true;
+}
+function showUpdateModal(apkUrl){
+  if(updateShown) return; updateShown = true;
+  try{
+    var ov = document.getElementById("updateScreen"); if(!ov) return;
+    var go = document.getElementById("btnUpdateNow");
+    var later = document.getElementById("btnUpdateLater");
+    if(go) go.onclick = function(){
+      var w = null;
+      try{ w = window.open(apkUrl, "_blank"); }catch(e){ w = null; }
+      if(!w){ try{ window.location.href = apkUrl; }catch(e2){} }
+    };
+    if(later) later.onclick = function(){ ov.classList.add("hidden"); };
+    ov.classList.remove("hidden");
+  }catch(e){ /* modal must never break the game */ }
+}
+function checkAppVersion(){
+  if(typeof APP_VERSION !== "number") return; /* website preview / unstamped build: never prompt */
+  try{
+    if(typeof fetch !== "function") return;
+    var ctrl = ("AbortController" in window) ? new AbortController() : null;
+    var timer = null;
+    if(ctrl) timer = setTimeout(function(){ try{ ctrl.abort(); }catch(e){} }, 4000);
+    var opts = ctrl ? { signal: ctrl.signal, cache: "no-store" } : { cache: "no-store" };
+    fetch(VERSION_URL, opts).then(function(res){
+      if(timer) clearTimeout(timer);
+      if(!res || !res.ok) return null;
+      return res.json();
+    }).then(function(data){
+      if(!validVersionInfo(data)) return;
+      if(APP_VERSION < data.latest) showUpdateModal(data.apkUrl);
+    }).catch(function(){ if(timer) clearTimeout(timer); });
+  }catch(e){ /* offline / no fetch: ignore silently */ }
+}
 
 /* ---------------- Save (localStorage) ---------------- */
 var SAVE_KEY = "fruitslice-save-v1";
@@ -1981,6 +2042,8 @@ setTimeout(resize, 60);
 /* Real Unity (APK only): initialise the SDK and preload ads; the Home
    banner shows only once 4 game-overs are saved (gated in the bridge).
    No-op on the web preview. */
+/* Old-version prompt (silent when offline / preview). */
+checkAppVersion();
 if(window.UnityAdsNative) window.UnityAdsNative.init();
 </script>
 
