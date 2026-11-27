@@ -405,6 +405,7 @@ function saveSave(){
       bestScore: bestScore,
       bestCombo: bestComboEver,
       bestZen: bestZen,
+      gamesPlayed: gamesPlayed, /* banner gate + interstitial counter; added 2026-11-27 */
       lang: lang,
       soundOn: soundOn,
       musicOn: musicOn,
@@ -943,8 +944,8 @@ function endGame(reason){
      screen, and only when the player taps it. */
   var cb = document.getElementById("btnContinue");
   if (cb) cb.classList.toggle("hidden", continuedThisRun);
-  /* Ad break after every 2nd game over */
-  if (gamesPlayed % 2 === 0){
+  /* Ad break after every 5th game over */
+  if (gamesPlayed % 5 === 0){
     showAdBreak(function(){ MODE = "over"; showScreen("over"); });
   } else {
     showScreen("over");
@@ -1944,6 +1945,7 @@ bind("btnDailyDouble", function(){ watchDailyDoubleAd(); });
     if (typeof d.bestScore === "number" && d.bestScore > 0) bestScore = d.bestScore;
     if (typeof d.bestCombo === "number" && d.bestCombo > 0) bestComboEver = d.bestCombo;
     if (typeof d.bestZen === "number" && d.bestZen > 0) bestZen = d.bestZen;
+    if (typeof d.gamesPlayed === "number" && d.gamesPlayed > 0) gamesPlayed = Math.floor(d.gamesPlayed);
     if (d.lang === "en" || d.lang === "hi") lang = d.lang;
     if (typeof d.soundOn === "boolean") soundOn = d.soundOn;
     if (typeof d.musicOn === "boolean") musicOn = d.musicOn;
@@ -1962,6 +1964,11 @@ bind("btnDailyDouble", function(){ watchDailyDoubleAd(); });
   document.getElementById("bestCombo").textContent = bestComboEver;
   refreshEconomyUI();
 })();
+/* Banner eligibility (binding rule): the Home banner may only appear
+   once the player has finished 4 game-overs (gamesPlayed, persisted
+   in the save). The Unity bridge asks this before showing a banner —
+   on cold start it answers "no", so no ad ever shows on app open. */
+window.__bannerEligible = function(){ return gamesPlayed >= 4; };
 resize();
 applyLang();
 syncToggles();
@@ -1971,8 +1978,9 @@ showScreen("home");
 setTimeout(function(){ lazyLoadArt(); setTheme("day"); }, 400);
 requestAnimationFrame(loop);
 setTimeout(resize, 60);
-/* Real Unity (APK only): initialise the SDK, preload ads and show
-   the Home banner. No-op on the web preview. */
+/* Real Unity (APK only): initialise the SDK and preload ads; the Home
+   banner shows only once 4 game-overs are saved (gated in the bridge).
+   No-op on the web preview. */
 if(window.UnityAdsNative) window.UnityAdsNative.init();
 </script>
 
@@ -1990,8 +1998,9 @@ if(window.UnityAdsNative) window.UnityAdsNative.init();
      ready" (rewarded). There is no demo/fake ad anywhere in the app.
    * No App Open: Unity Ads has no app-open format — do not invent one.
      Nothing shows on cold start.
-   * Placements: banner on Home only, interstitial after every 2nd
-     game over, rewarded only when the player taps Watch Ad
+   * Placements: banner on Home only once 4 game-overs are saved,
+     interstitial after every 5th game over, rewarded only when the
+     player taps Watch Ad
      (Continue on the game-over screen / knife unlocks / daily double).
      Nothing is forced during play. testMode is false (release). */
 window.UNITY_CONFIG = {
@@ -2029,6 +2038,16 @@ window.UnityAdsNative = (function(){
   }
   function showHomeBanner(){
     if(!inited || bannerShown) return;
+    /* BANNER GATE (binding rule): no banner on app open, and none
+       before the player has completed 4 levels / pictures / game
+       overs. The game exposes its own persisted completed count via
+       window.__bannerEligible; until it answers yes this is a no-op
+       and no banner view is ever created, so Home shows no ad and no
+       empty ad gap. Fail closed: a missing or throwing predicate
+       means no banner. */
+    var __eligible = false;
+    try{ __eligible = (typeof window.__bannerEligible === 'function') && !!window.__bannerEligible(); }catch(e){ __eligible = false; }
+    if(!__eligible) return;
     try{
       plugin.showBanner({placementId: cfg.bannerPlacementId}).then(function(){
         bannerShown = true;
@@ -2107,7 +2126,7 @@ window.UnityAdsNative = (function(){
             inited = true;
             preloadInterstitial();
             preloadRewarded();
-            showHomeBanner();
+            showHomeBanner(); /* gated inside: no-op until 4 completions */
             done(true);
           } else done(false);
         }).catch(function(){ done(false); });
